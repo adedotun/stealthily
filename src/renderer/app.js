@@ -174,6 +174,10 @@ function applySettings(s) {
   const copilotVal = s.copilotAutoAnswer !== undefined ? s.copilotAutoAnswer : true;
   if (copilotVal) document.getElementById('t-copilot').classList.add('on');
   else document.getElementById('t-copilot').classList.remove('on');
+  
+  const pcVal = s.promptCaching !== undefined ? s.promptCaching : true;
+  if (pcVal) document.getElementById('t-promptcaching').classList.add('on');
+  else document.getElementById('t-promptcaching').classList.remove('on');
 
   // Dynamically update Audio Panel based on transcription method
   const transcriptionMethod = s.transcriptionMethod || 'chrome';
@@ -208,6 +212,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     opacity:       parseFloat(document.getElementById('s-opacity').value) || 0.97,
     proactiveMode: document.getElementById('t-proactive').classList.contains('on'),
     copilotAutoAnswer: document.getElementById('t-copilot').classList.contains('on'),
+    promptCaching: document.getElementById('t-promptcaching').classList.contains('on'),
   };
   await window.ghostmind.saveSettings(s);
   state.settings = s;
@@ -217,7 +222,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 });
 
 // Toggles
-['t-clipboard','t-proactive','t-copilot'].forEach(id => {
+['t-clipboard','t-proactive','t-copilot','t-promptcaching'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     e.currentTarget.classList.toggle('on');
   });
@@ -249,7 +254,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 // ─── MESSAGES ─────────────────────────────────────────────────────────────────
-function addMsg(role, content, imgB64, isCopilot = false) {
+function addMsg(role, content, imgB64, isCopilot = false, usageStats = null) {
   const now   = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const el    = document.createElement('div');
   el.className = `msg ${role} ${isCopilot ? 'copilot' : ''}`;
@@ -266,8 +271,20 @@ function addMsg(role, content, imgB64, isCopilot = false) {
   }
   inner += `<div class="bubble">${bubbleContent}</div>`;
   if (role !== 'system') {
+    let cacheLabel = '';
+    if (usageStats) {
+      const read = usageStats.cache_read_input_tokens || 0;
+      const created = usageStats.cache_creation_input_tokens || 0;
+      if (read > 0) {
+        cacheLabel = `<span class="cache-stat hit" title="Reused ${read} tokens from prompt cache">⚡ Cache Hit: ${read}</span>`;
+      } else if (created > 0) {
+        cacheLabel = `<span class="cache-stat write" title="Wrote ${created} tokens to prompt cache">💾 Cache Write: ${created}</span>`;
+      }
+    }
+
     inner += `<div class="msg-meta">
       <span>${now}</span>
+      ${cacheLabel}
       <button class="msg-copy" onclick="copyText(this)" data-text="${escAttr(content)}">copy</button>
     </div>`;
   }
@@ -351,7 +368,7 @@ async function askAI(userText, imgB64, apiTextOverride) {
     typingEl.remove();
 
     const text = data.content?.[0]?.text || '';
-    addMsg('ai', text);
+    addMsg('ai', text, null, false, data.usage);
     // Update state messages correctly
     state.messages[state.messages.length - 1] = { role: 'user', content: userText };
     state.messages.push({ role: 'assistant', content: text });
@@ -442,7 +459,7 @@ async function askCopilotAI(question) {
     typingEl.remove();
 
     const text = data.content?.[0]?.text || '';
-    addMsg('ai', text, null, true);
+    addMsg('ai', text, null, true, data.usage);
     
     // Update state messages correctly
     state.messages[state.messages.length - 1] = { role: 'user', content: question };

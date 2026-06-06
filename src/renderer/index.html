@@ -387,6 +387,25 @@ body, input, textarea, button, a, select, canvas, span, div {
   color: var(--muted);
   padding: 0 2px;
 }
+.cache-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.cache-stat.hit {
+  background: rgba(0, 255, 127, 0.1);
+  color: var(--acid);
+}
+.cache-stat.write {
+  background: rgba(255, 191, 0, 0.1);
+  color: var(--amber);
+}
 .msg-copy {
   opacity: 0;
   cursor: pointer;
@@ -1023,6 +1042,12 @@ body, input, textarea, button, a, select, canvas, span, div {
             <option value="claude-opus-4-5-20251101">Claude 4.5 Opus</option>
             <option value="claude-opus-4-8">Claude 4.8 Opus (premium)</option>
           </select>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-inline">
+            <label>Enable Prompt Caching (Claude)</label>
+            <div class="toggle on" id="t-promptcaching"></div>
+          </div>
         </div>
         <div class="setting-row">
           <label>System Prompt</label>

@@ -102,6 +102,7 @@ function loadSettings() {
     watchInterval: 0,
     proactiveMode: false,
     copilotAutoAnswer: true,
+    promptCaching: true,
     theme: 'obsidian',
     opacity: 0.97,
     position: 'bottom-right',
@@ -1000,6 +1001,31 @@ ipcMain.handle('send-ai-request', async (_, { messages, model, systemPrompt, max
   const system = systemPrompt || settings.systemPrompt || '';
   const max_tokens = maxTokens || 2048;
 
+  const isPromptCachingEnabled = settings.promptCaching !== false && requestModel.startsWith('claude-');
+
+  // Convert system prompt to blocks if prompt caching is enabled, to apply block-level caching
+  let systemBody = system;
+  if (isPromptCachingEnabled && typeof system === 'string' && system.trim() !== '') {
+    systemBody = [
+      {
+        type: 'text',
+        text: system,
+        cache_control: { type: 'ephemeral' }
+      }
+    ];
+  }
+
+  const requestBody = {
+    model: requestModel,
+    max_tokens,
+    system: systemBody,
+    messages,
+  };
+
+  if (isPromptCachingEnabled) {
+    requestBody.cache_control = { type: 'ephemeral' };
+  }
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -1007,12 +1033,7 @@ ipcMain.handle('send-ai-request', async (_, { messages, model, systemPrompt, max
       'x-api-key': settings.apiKey,
       'anthropic-version': '2023-06-01',
     },
-    body: JSON.stringify({
-      model: requestModel,
-      max_tokens,
-      system,
-      messages,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
