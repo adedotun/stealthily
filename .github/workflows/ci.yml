@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main, master ]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test:
     name: Run E2E Tests
@@ -52,7 +55,7 @@ jobs:
       - name: Compile Installer Packages
         run: |
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:mac
+            npm run build:mac -- -c.mac.identity=null
           else
             npm run build:win
           fi
