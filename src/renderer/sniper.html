@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.35);
+    cursor: crosshair;
+    user-select: none;
+    overflow: hidden;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  #overlay {
+    position: fixed; inset: 0;
+  }
+  #selection {
+    position: absolute;
+    border: 2px solid #00ff88;
+    box-shadow:
+      0 0 0 1px rgba(0,255,136,0.3),
+      inset 0 0 30px rgba(0,255,136,0.03);
+    display: none;
+    pointer-events: none;
+  }
+  /* Corner handles */
+  #selection::before, #selection::after {
+    content: '';
+    position: absolute;
+    width: 10px; height: 10px;
+    border-color: #00ff88;
+    border-style: solid;
+  }
+  #selection::before {
+    top: -1px; left: -1px;
+    border-width: 2px 0 0 2px;
+  }
+  #selection::after {
+    bottom: -1px; right: -1px;
+    border-width: 0 2px 2px 0;
+  }
+  #dims {
+    position: absolute;
+    background: rgba(0,0,0,0.85);
+    color: #00ff88;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,255,136,0.3);
+    pointer-events: none;
+    white-space: nowrap;
+    display: none;
+  }
+  #instructions {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    line-height: 2;
+    pointer-events: none;
+  }
+  #instructions .key {
+    display: inline-block;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+  }
+  #crosshair-h, #crosshair-v {
+    position: fixed;
+    background: rgba(0,255,136,0.15);
+    pointer-events: none;
+  }
+  #crosshair-h { left: 0; right: 0; height: 1px; }
+  #crosshair-v { top: 0; bottom: 0; width: 1px; }
+</style>
+</head>
+<body>
+<div id="overlay">
+  <div id="crosshair-h"></div>
+  <div id="crosshair-v"></div>
+  <div id="instructions">
+    <div>GHOSTMIND SNIPER</div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;">
+      Drag to select region &nbsp;·&nbsp; <span class="key">ESC</span> to cancel
+    </div>
+  </div>
+  <div id="selection"></div>
+  <div id="dims"></div>
+</div>
+<script>
+  const overlay     = document.getElementById('overlay');
+  const selEl       = document.getElementById('selection');
+  const dimsEl      = document.getElementById('dims');
+  const instructions = document.getElementById('instructions');
+  const crossH      = document.getElementById('crosshair-h');
+  const crossV      = document.getElementById('crosshair-v');
+
+  let startX = 0, startY = 0, dragging = false;
+
+  document.addEventListener('mousemove', (e) => {
+    crossH.style.top  = e.clientY + 'px';
+    crossV.style.left = e.clientX + 'px';
+
+    if (dragging) {
+      const x = Math.min(e.clientX, startX);
+      const y = Math.min(e.clientY, startY);
+      const w = Math.abs(e.clientX - startX);
+      const h = Math.abs(e.clientY - startY);
+
+      selEl.style.left   = x + 'px';
+      selEl.style.top    = y + 'px';
+      selEl.style.width  = w + 'px';
+      selEl.style.height = h + 'px';
+      selEl.style.display = 'block';
+
+      // Dims label: stick above selection, clamp to screen
+      const labelX = Math.min(x, window.innerWidth  - 120);
+      const labelY = Math.max(y - 24, 4);
+      dimsEl.style.left    = labelX + 'px';
+      dimsEl.style.top     = labelY + 'px';
+      dimsEl.style.display = 'block';
+      dimsEl.textContent   = `${w} × ${h}`;
+    }
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    startX = e.clientX;
+    startY = e.clientY;
+    dragging = true;
+    instructions.style.display = 'none';
+    selEl.style.display = 'block';
+  });
+
+  document.addEventListener('mouseup', async (e) => {
+    if (!dragging) return;
+    dragging = false;
+
+    const x = Math.min(e.clientX, startX);
+    const y = Math.min(e.clientY, startY);
+    const w = Math.abs(e.clientX - startX);
+    const h = Math.abs(e.clientY - startY);
+
+    if (w < 10 || h < 10) {
+      window.ghostmind.snipeCancel();
+      return;
+    }
+
+    // Brief flash to confirm selection
+    selEl.style.background = 'rgba(0,255,136,0.08)';
+    await new Promise(r => setTimeout(r, 120));
+
+    await window.ghostmind.snipeResult({ x, y, w, h });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') window.ghostmind.snipeCancel();
+  });
+</script>
+</body>
+</html>

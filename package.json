@@ -1,0 +1,49 @@
+{
+  "name": "ghostmind",
+  "version": "2.0.0",
+  "description": "Stealth AI assistant — invisible to all screen capture",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:all": "electron-builder --mac --win",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "node-global-key-listener": "^0.3.0",
+    "node-record-lpcm16": "^1.0.1",
+    "screenshot-desktop": "^1.12.7",
+    "systeminformation": "^5.21.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "electron": "^41.7.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.ghostmind.app",
+    "productName": "GhostMind",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "hardenedRuntime": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
