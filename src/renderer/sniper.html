@@ -7,7 +7,12 @@
   html, body {
     width: 100vw; height: 100vh;
     background: rgba(0,0,0,0.35);
-    cursor: crosshair;
+    /* STEALTH: never 'crosshair' here. The OS cursor is drawn by the OS,
+       not inside this capture-protected window, and screen-share tools
+       include it — a '+' cursor tells everyone a tool is active.
+       The in-window guide lines below give the same precision while the
+       pointer keeps its ordinary arrow shape. */
+    cursor: default;
     user-select: none;
     overflow: hidden;
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;

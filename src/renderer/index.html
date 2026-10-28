@@ -37,6 +37,37 @@
   --ease-snap: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* ── THEMES (v2.2) — Settings → Interface Theme sets data-theme on <html>.
+      :root above is Obsidian. Each theme only re-skins the variables. */
+[data-theme="midnight"] {
+  --bg0: #05080f; --bg1: #080d18; --bg2: #0c1424; --bg3: #111a2e; --bg4: #182642;
+  --line: rgba(147,197,253,0.09); --line2: rgba(147,197,253,0.16);
+  --acid: #38bdf8; --acid-dim: rgba(56,189,248,0.15); --acid-glow: rgba(56,189,248,0.4);
+  --amber: #fbbf24; --red: #fb7185; --blue: #818cf8;
+  --muted: #3d4c63; --muted2: #5b6b84; --text: #d7e5f5; --text-dim: #8fa3bd;
+}
+[data-theme="ember"] {
+  --bg0: #0c0806; --bg1: #120d09; --bg2: #1a130c; --bg3: #211810; --bg4: #2c2013;
+  --line: rgba(255,183,71,0.09); --line2: rgba(255,183,71,0.16);
+  --acid: #ffb347; --acid-dim: rgba(255,179,71,0.15); --acid-glow: rgba(255,179,71,0.4);
+  --amber: #ff7847; --red: #ff5566; --blue: #ffb347;
+  --muted: #57452e; --muted2: #77644a; --text: #f0e4d3; --text-dim: #a68f6d;
+}
+[data-theme="violet"] {
+  --bg0: #090614; --bg1: #0e0a1e; --bg2: #150f2a; --bg3: #1c1436; --bg4: #271d4a;
+  --line: rgba(183,140,255,0.1); --line2: rgba(183,140,255,0.18);
+  --acid: #b78cff; --acid-dim: rgba(183,140,255,0.16); --acid-glow: rgba(183,140,255,0.45);
+  --amber: #ffb3d9; --red: #ff6688; --blue: #7dd3fc;
+  --muted: #4a3d6e; --muted2: #6a5a94; --text: #e6ddf7; --text-dim: #a493cc;
+}
+[data-theme="paper"] {
+  --bg0: #efe9dc; --bg1: #f7f3e9; --bg2: #fffdf7; --bg3: #efe9dc; --bg4: #e0d7c2;
+  --line: rgba(60,50,20,0.1); --line2: rgba(60,50,20,0.18);
+  --acid: #0a7d4f; --acid-dim: rgba(10,125,79,0.12); --acid-glow: rgba(10,125,79,0.25);
+  --amber: #b45309; --red: #d42446; --blue: #2563eb;
+  --muted: #b3a888; --muted2: #8a8071; --text: #221f1a; --text-dim: #5c564a;
+}
+
 /* ── RESET ────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { height: 100%; }
@@ -859,7 +890,7 @@ body, input, textarea, button, a, select, canvas, span, div {
           </svg>
         </div>
         <span id="logo-name">GhostMind</span>
-        <span id="logo-version">v2.1</span>
+        <span id="logo-version">v2.2</span>
       </div>
     </div>
     <div id="titlebar-right">
@@ -1083,6 +1114,16 @@ body, input, textarea, button, a, select, canvas, span, div {
       </div>
       <div class="setting-section">
         <div class="setting-section-title">Window</div>
+        <div class="setting-row">
+          <label>Interface Theme</label>
+          <select id="s-theme">
+            <option value="obsidian">Obsidian — black / acid green</option>
+            <option value="midnight">Midnight — deep navy / sky</option>
+            <option value="ember">Ember — charcoal / amber</option>
+            <option value="violet">Violet — plum / lilac</option>
+            <option value="paper">Paper — light / ink</option>
+          </select>
+        </div>
         <div class="setting-row">
           <label>Position</label>
           <select id="s-position">

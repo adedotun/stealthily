@@ -128,6 +128,11 @@ window.ghostmind.on('focus-input', () => {
 });
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
+// Themes are pure CSS-variable sets in index.html keyed by data-theme.
+function applyTheme(name) {
+  document.documentElement.setAttribute('data-theme', name || 'obsidian');
+}
+
 function applySettings(s) {
   const sid = v => document.getElementById(v);
   sid('s-apikey').value    = s.apiKey    || '';
@@ -139,6 +144,8 @@ function applySettings(s) {
   sid('s-watch').value     = s.watchInterval || 0;
   sid('s-position').value  = s.position  || 'bottom-right';
   sid('s-opacity').value   = s.opacity   || 0.97;
+  sid('s-theme').value     = s.theme     || 'obsidian';
+  applyTheme(s.theme || 'obsidian');
   if (s.proactiveMode) document.getElementById('t-proactive').classList.add('on');
   const copilotVal = s.copilotAutoAnswer !== undefined ? s.copilotAutoAnswer : true;
   if (copilotVal) document.getElementById('t-copilot').classList.add('on');
@@ -171,6 +178,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
       return v === 0 ? 0 : Math.max(30, v);
     })(),
     position:      document.getElementById('s-position').value,
+    theme:         document.getElementById('s-theme').value,
     opacity:       parseFloat(document.getElementById('s-opacity').value) || 0.97,
     proactiveMode: document.getElementById('t-proactive').classList.contains('on'),
     copilotAutoAnswer: document.getElementById('t-copilot').classList.contains('on'),
@@ -181,6 +189,11 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   setStatus(s.apiKey ? 'ready' : 'offline');
   addMsg('system', '✓ Settings saved');
   switchTab('chat');
+});
+
+// Theme picker previews live; it is persisted by Save Settings.
+document.getElementById('s-theme').addEventListener('change', (e) => {
+  applyTheme(e.target.value);
 });
 
 // Toggles
@@ -680,6 +693,8 @@ function drawWaveform(analyser, canvasId) {
   const ctx    = canvas.getContext('2d');
   const buf    = new Uint8Array(analyser.frequencyBinCount);
 
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--acid').trim() || '#00ff88';
+
   function draw() {
     if (!state.isCapturing) return;
     requestAnimationFrame(draw);
@@ -689,9 +704,9 @@ function drawWaveform(analyser, canvasId) {
     canvas.height = canvas.offsetHeight;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    ctx.strokeStyle = '#00ff88';
+    ctx.strokeStyle = accent;
     ctx.lineWidth   = 1.5;
-    ctx.shadowColor = '#00ff88';
+    ctx.shadowColor = accent;
     ctx.shadowBlur  = 4;
     ctx.beginPath();
 

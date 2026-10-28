@@ -1,7 +1,8 @@
-# 👻 GhostMind v2.1 — Native Electron App
+# 👻 GhostMind v2.2 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
+**v2.2:** interface themes, and a stealth fix for the Snipe cursor — see [What changed in v2.2](#what-changed-in-v22).
 
 ---
 
@@ -125,8 +126,8 @@ The sniper overlay (region selector) uses the **same protection** — so even th
 Full AI chat with Claude (default model `claude-sonnet-4-5-20250929`, selectable in Settings). Conversation history maintained per session. Markdown rendered including code blocks. The live transcript is injected as context into AI messages automatically.
 
 ### 👁 Stealth Snipe (`Cmd+Shift+S`)
-- Press hotkey → crosshair cursor appears (invisible to screen share)
-- Drag to select any region of your screen
+- Press hotkey → drag to select any region of your screen
+- Your pointer stays an **ordinary arrow** the whole time (see v2.2 notes — the old crosshair cursor was visible to share viewers); the precision guide lines and selection box live inside the capture-protected overlay, so only you see them
 - GhostMind captures it, no picker dialog, no yellow border
 - One-click: **Solve** / **Explain** / **Extract text** / **Debug** or a custom question
 - The screenshot goes to Claude with vision
@@ -138,6 +139,9 @@ Full AI chat with Claude (default model `claude-sonnet-4-5-20250929`, selectable
 - Transcription by **faster-whisper / mlx-whisper running on your machine**. Audio never leaves the device; only the resulting transcript text is sent to Claude, as chat context
 - Live waveform from the call track, full transcript panel, one-click **Analyze Full Transcript** (summary, decisions, action items)
 - The chat **mic button** is dictation: it runs the same local pipeline and drops your words into the chat input
+
+### 🎨 Interface themes (v2.2)
+Five looks, switchable in **Settings → Window → Interface Theme** with live preview: **Obsidian** (black / acid green, the original), **Midnight** (deep navy / sky), **Ember** (charcoal / amber), **Violet** (plum / lilac), and **Paper** (light / ink). Themes are pure CSS-variable sets — accents, panels, text and even the waveform follow the theme.
 
 ### ⚡ Proactive intelligence
 When enabled:
@@ -216,6 +220,11 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v2.2
+
+- **Added: interface themes** — five CSS-variable themes (Obsidian, Midnight, Ember, Violet, Paper) in Settings → Window → Interface Theme, with live preview and persistence (`theme` setting, which existed unused since v2). The waveform now draws in the theme accent instead of hardcoded green.
+- **Fixed: Snipe cursor leak** — the sniper overlay used `cursor: crosshair`. Content protection hides the *window*, but the OS pointer is drawn by the OS and included by Zoom/Meet/OBS, so share viewers saw a suspicious `+` whenever you sniped. The overlay now keeps the default arrow; the crosshair guide lines remain, inside the protected window where only you can see them.
 
 ## What changed in v2.1
 
