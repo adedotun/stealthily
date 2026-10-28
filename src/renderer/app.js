@@ -41,8 +41,26 @@ function handleInit({ settings, sessions, permissions }) {
 
 window.ghostmind.on('init', handleInit);
 
-window.ghostmind.on('external-transcript', ({ line }) => {
+window.ghostmind.on('external-transcript', ({ line, partial, speaker }) => {
   if (!line) return;
+
+  // v3.2 live partials: provisional words for an utterance still being
+  // spoken — shown dimmed in the transcript bar, never stored, and
+  // cleared when the final segment for that speaker lands.
+  const partialEl = document.getElementById('live-partial');
+  if (partial) {
+    if (partialEl) {
+      partialEl.textContent = line + ' …';
+      partialEl.dataset.speaker = speaker || '';
+      partialEl.style.display = 'block';
+      document.getElementById('transcript-bar').classList.add('visible');
+    }
+    return;
+  }
+  if (partialEl && partialEl.dataset.speaker === (speaker || '')) {
+    partialEl.style.display = 'none';
+    partialEl.textContent = '';
+  }
 
   // Dictation mode (mic button): your own lines go to the chat input
   // instead of the call transcript, and auto-send when you stop.
@@ -135,6 +153,11 @@ window.ghostmind.on('focus-input', () => {
   document.getElementById('chat-input').focus();
 });
 
+// Memory search (v3.2): filter the session list as you type.
+document.getElementById('memory-search')?.addEventListener('input', () => {
+  renderMemory(state.sessions);
+});
+
 // ─── LIVE SUMMARY + POST-CALL MAGIC (v3.1) ───────────────────────────────────
 // A running "so far" line in the transcript bar, refreshed every 12 lines,
 // and — when a call ends — an automatic summary + follow-up email draft.
@@ -145,7 +168,7 @@ async function updateLiveSummary() {
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: [{ role: 'user', content: state.transcript.slice(-40).join('\n') }],
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
       systemPrompt: 'Summarize this call transcript so far in ONE friendly sentence (max 25 words) starting with "So far:". Plain words, no preamble.',
       maxTokens: 90,
     });
@@ -164,7 +187,7 @@ async function generatePostCall() {
     const transcript = state.transcript.slice(-80).join('\n');
     const data = await window.ghostmind.sendAIRequest({
       messages: [{ role: 'user', content: transcript }],
-      model: state.settings.model || 'claude-sonnet-4-5-20250929',
+      model: state.settings.model || 'claude-sonnet-5-5',
       systemPrompt: 'You are GhostMind. From the call transcript, reply with exactly two sections headed "SUMMARY" and "EMAIL". SUMMARY: 3-5 short bullet lines (decisions, key points, action items with owners). EMAIL: a short, warm follow-up email the user could send (subject line first, then 3-5 sentences, sign off as the user). Plain language. No other text.',
       maxTokens: 700,
     });
@@ -369,7 +392,7 @@ function applySettings(s) {
   const sid = v => document.getElementById(v);
   sid('s-apikey').value    = s.apiKey    || '';
   sid('s-localmodel').value = s.localModel || 'base.en';
-  sid('s-model').value     = s.model     || 'claude-sonnet-4-5-20250929';
+  sid('s-model').value     = s.model     || 'claude-sonnet-5-5';
   sid('s-system').value    = s.systemPrompt || '';
   sid('s-hotkey').value    = s.hotkey    || 'CommandOrControl+Shift+G';
   sid('s-snipe-hotkey').value = s.snipeHotkey || 'CommandOrControl+Shift+S';
@@ -569,7 +592,7 @@ async function askAI(userText, imgB64, apiTextOverride) {
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: apiMessages,
-      model: state.settings.model || 'claude-sonnet-4-5-20250929',
+      model: state.settings.model || 'claude-sonnet-5-5',
       systemPrompt: state.settings.systemPrompt || 'You are GhostMind, a stealth AI assistant running invisibly. Be sharp, concise, maximally helpful. Analyze screenshots thoroughly.',
       maxTokens: 2048
     });
@@ -660,7 +683,7 @@ async function askCopilotAI(question) {
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: apiMessages,
-      model: state.settings.model || 'claude-sonnet-4-5-20250929',
+      model: state.settings.model || 'claude-sonnet-5-5',
       systemPrompt: copilotSystemPrompt,
       maxTokens: 2048
     });
@@ -1034,7 +1057,7 @@ async function triggerProactiveInsight() {
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: [{ role: 'user', content: `Conversation context: "${recent}"\n\nOne insight:` }],
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
       systemPrompt: 'You are a silent assistant. Based on conversation context, give ONE ultra-short insight, warning, or suggestion (max 15 words). No preamble.',
       maxTokens: 80
     });
@@ -1059,7 +1082,7 @@ window.ghostmind.on('screen-snapshot', async ({ b64, mediaType = 'image/png' }) 
           { type: 'text', text: 'What do you notice?' }
         ]
       }],
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
       systemPrompt: 'You are a silent AI assistant watching someone\'s screen. If you see something interesting, a problem, or something you can help with — give ONE short proactive suggestion (max 15 words). If nothing interesting, respond with just: "ok".',
       maxTokens: 80
     });
@@ -1121,7 +1144,7 @@ document.getElementById('save-session-btn').addEventListener('click', async () =
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: state.messages.slice(-10),
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-haiku-5-5',
       systemPrompt: 'Summarize this conversation in 2-3 sentences. Focus on what was discussed and any conclusions. Be concise.',
       maxTokens: 150
     });
@@ -1139,11 +1162,17 @@ function renderMemory(sessions) {
   // Update badge if called before DOM is ready
   const list = document.getElementById('memory-list');
   if (!list) return;
+  const q = (document.getElementById('memory-search')?.value || '').trim().toLowerCase();
+  const filtered = (sessions || []).filter(s => !q || String(s.summary).toLowerCase().includes(q));
   if (!sessions || sessions.length === 0) {
     list.innerHTML = '<div class="empty-state">NO SESSIONS SAVED<br>CONVERSATIONS APPEAR HERE</div>';
     return;
   }
-  list.innerHTML = sessions.slice().reverse().map(s => `
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state">NO SESSIONS MATCH YOUR SEARCH</div>';
+    return;
+  }
+  list.innerHTML = filtered.slice().reverse().map(s => `
     <div class="memory-item">
       <div class="memory-date">${new Date(s.date).toLocaleString()}</div>
       <div class="memory-text">${escHtml(s.summary)}</div>

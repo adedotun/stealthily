@@ -46,7 +46,11 @@ class LocalTranscriber {
       if (settle) { this.pending.delete(msg.id); settle(msg); }
       if (msg.text) {
         const label = msg.speaker === 'you' ? 'You' : 'Them';
-        this.sendToRenderer('external-transcript', { line: `[${label}] ${msg.text}` });
+        this.sendToRenderer('external-transcript', {
+          line: `[${label}] ${msg.text}`,
+          partial: !!msg.partial,
+          speaker: msg.speaker,
+        });
       }
     });
     this.proc.stderr.on('data', d => console.error('[transcriber]', d.toString().trim()));
@@ -65,13 +69,15 @@ class LocalTranscriber {
   }
 
   // wavBase64: one VAD segment from one speaker track.
-  // Returns a promise for the sidecar's JSON result.
-  transcribe(wavBase64, speaker, startMs) {
+  // partial (v3.2): a provisional transcription of an utterance still in
+  // progress — the renderer shows it dimmed and the final segment
+  // replaces it. Returns a promise for the sidecar's JSON result.
+  transcribe(wavBase64, speaker, startMs, partial = false) {
     if (!this.proc) this.start();
     const run = () => new Promise((resolve) => {
       const id = this.nextId++;
       this.pending.set(id, resolve);
-      this.proc.stdin.write(JSON.stringify({ id, wav_base64: wavBase64, speaker, start_ms: startMs }) + '\n');
+      this.proc.stdin.write(JSON.stringify({ id, wav_base64: wavBase64, speaker, start_ms: startMs, partial: !!partial }) + '\n');
     });
     this.queue = this.queue.then(run, run);
     return this.queue;
@@ -84,8 +90,8 @@ function registerLocalTranscription({ ipcMain, sidecarPath, pythonPath, model, s
   const transcriber = new LocalTranscriber({ sidecarPath, pythonPath, model, sendToRenderer, command });
   ipcMain.handle('local-transcription-start', () => { transcriber.start(); return { ok: true }; });
   ipcMain.handle('local-transcription-stop',  () => { transcriber.stop();  return { ok: true }; });
-  ipcMain.handle('transcribe-local-segment', (_e, { wavBase64, speaker, startMs }) =>
-    transcriber.transcribe(wavBase64, speaker, startMs));
+  ipcMain.handle('transcribe-local-segment', (_e, { wavBase64, speaker, startMs, partial }) =>
+    transcriber.transcribe(wavBase64, speaker, startMs, partial));
   return transcriber;
 }
 

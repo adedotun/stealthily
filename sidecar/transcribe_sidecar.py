@@ -94,7 +94,8 @@ def handle(req):
     wav = base64.b64decode(req["wav_base64"])
     result = transcribe_wav_bytes(wav)
     return {"id": req.get("id"), "speaker": req.get("speaker", "them"),
-            "start_ms": req.get("start_ms", 0), **result}
+            "start_ms": req.get("start_ms", 0),
+            "partial": bool(req.get("partial")), **result}
 
 def main():
     ap = argparse.ArgumentParser()

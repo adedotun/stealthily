@@ -1,4 +1,4 @@
-# 👻 GhostMind v3.1 — Native Electron App
+# 👻 GhostMind v3.2 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
@@ -6,6 +6,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v2.3:** zero-trace capture — hidden pointer, keyboard selection, and full-screen capture with no overlay at all — see [What changed in v2.3](#what-changed-in-v23).
 **v3.0:** the friendly redesign — a calmer modern interface and a 2-minute setup wizard, so non-technical people can use it — see [What changed in v3.0](#what-changed-in-v30).
 **v3.1:** effortless + a little magic — Keychain-encrypted API key, faster transcription, live call summary, automatic post-call summary with a follow-up email draft, and the groundwork for one-click installs (bundled engine) and auto-updates — see [What changed in v3.1](#what-changed-in-v31).
+**v3.2:** live-feeling transcription (provisional words appear while someone is still speaking) and a real database memory — see [What changed in v3.2](#what-changed-in-v32).
 
 ---
 
@@ -225,6 +226,12 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.2
+
+- **Live partial transcription.** While a person is mid-sentence, GhostMind now shows provisional words (dimmed, italic, marked with …) that update as they speak, then get replaced by the polished final line. Implemented as segmenter snapshots → provisional sidecar passes flagged `partial` end-to-end (capture → main → sidecar → renderer), with at most one partial in flight per speaker track so finals are never starved.
+- **SQLite session memory.** Sessions moved from a flat `sessions.json` to a real database (`ghostmind.db`, Node's built-in `node:sqlite` — no new dependencies), retaining the last 200 sessions while the app still surfaces the most recent 10. The old JSON file is migrated automatically on first run and remains as a fallback if SQLite is unavailable.
+- **Memory search.** The Memory tab has a search box — past sessions filter as you type.
 
 ## What changed in v3.1
 

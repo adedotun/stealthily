@@ -91,6 +91,23 @@ class Segmenter {
 
   // Call when the stream stops, to flush a final partial segment.
   end() { if (this.inSpeech) this._flush(); }
+
+  // v3.2: a read-only look at the utterance currently in progress, for
+  // live "partial" transcription. Does not disturb the buffer — the
+  // final segment still flushes normally and replaces the partial text.
+  snapshot() {
+    if (!this.inSpeech || this.speechMs < this.minSpeechMs || this.frames.length === 0) return null;
+    const samples = new Float32Array(this.frames.length * this.frameSamples);
+    this.frames.forEach((f, i) => samples.set(f, i * this.frameSamples));
+    return {
+      speaker: this.speaker,
+      samples,
+      sampleRate: this.sampleRate,
+      startMs: this.startedAtMs + this.elapsedMs - this.frames.length * this.frameMs,
+      speechMs: this.speechMs,
+      partial: true,
+    };
+  }
 }
 
 if (typeof module !== 'undefined') module.exports = { Segmenter };

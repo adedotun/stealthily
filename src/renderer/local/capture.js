@@ -76,7 +76,21 @@ class LocalCapture {
     if (this.onStream) { try { this.onStream(stream, speaker); } catch (_) {} }
     node.port.onmessage = (ev) => segmenter.push(ev.data);
     source.connect(node); // do NOT connect to ctx.destination — no playback
-    this.tracks.push({ stream, ctx, segmenter, speaker });
+    const track = { stream, ctx, segmenter, speaker, partialInFlight: false, partialTimer: null };
+    // v3.2 live partials: every 3s, if an utterance is in progress, send a
+    // snapshot for a provisional transcription (shown dimmed, replaced by
+    // the final segment). One partial in flight per track, max.
+    track.partialTimer = setInterval(() => {
+      if (track.partialInFlight) return;
+      const snap = segmenter.snapshot();
+      if (!snap) return;
+      track.partialInFlight = true;
+      const wavBase64 = float32ToWavBase64(snap.samples, snap.sampleRate);
+      this.sendSegment({ wavBase64, speaker: snap.speaker, startMs: snap.startMs, partial: true })
+        .catch(() => {})
+        .finally(() => { track.partialInFlight = false; });
+    }, 3000);
+    this.tracks.push(track);
   }
 
   async start({ youDeviceId, themDeviceId }) {
@@ -86,6 +100,7 @@ class LocalCapture {
 
   stop() {
     for (const t of this.tracks) {
+      if (t.partialTimer) clearInterval(t.partialTimer);
       t.segmenter.end();
       t.stream.getTracks().forEach(tr => tr.stop());
       t.ctx.close();
