@@ -68,12 +68,21 @@ def wav_bytes_to_float32(wav_bytes):
         audio = np.interp(np.linspace(0, len(audio) - 1, n), np.arange(len(audio)), audio).astype(np.float32)
     return audio
 
-def transcribe_wav_bytes(wav_bytes):
+def transcribe_wav_bytes(wav_bytes, partial=False):
     if MOCK:
         return {"text": "[mock transcript]", "avg_logprob": None, "language": "en"}
     engine_name, model = load_engine()
     if engine_name == "faster-whisper":
-        segments, info = model.transcribe(wav_bytes_to_float32(wav_bytes), beam_size=1, vad_filter=False)
+        # v3.4: Silero VAD filtering on final segments — faster-whisper
+        # bundles Silero; it strips non-speech the renderer's simple
+        # energy VAD let through (breaths, keyboard, room noise), which
+        # cuts phantom/hallucinated lines. Partials skip it: they're
+        # mid-utterance and need every scrap of signal, fast.
+        segments, info = model.transcribe(
+            wav_bytes_to_float32(wav_bytes), beam_size=1,
+            vad_filter=not partial,
+            vad_parameters=dict(min_silence_duration_ms=500) if not partial else None,
+        )
         segs = list(segments)
         text = " ".join(s.text.strip() for s in segs).strip()
         logprob = (sum(s.avg_logprob for s in segs) / len(segs)) if segs else None
@@ -92,7 +101,7 @@ def transcribe_wav_bytes(wav_bytes):
 
 def handle(req):
     wav = base64.b64decode(req["wav_base64"])
-    result = transcribe_wav_bytes(wav)
+    result = transcribe_wav_bytes(wav, partial=bool(req.get("partial")))
     return {"id": req.get("id"), "speaker": req.get("speaker", "them"),
             "start_ms": req.get("start_ms", 0),
             "partial": bool(req.get("partial")), **result}

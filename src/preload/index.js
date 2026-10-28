@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('ghostmind', {
   saveSettings:   (s)      => ipcRenderer.invoke('save-settings', s),
   sendAIRequest:  (data)   => ipcRenderer.invoke('send-ai-request', data),
   sendAIRequestStream: (data) => ipcRenderer.invoke('send-ai-request-stream', data),
+  checkAI:        ()       => ipcRenderer.invoke('check-ai'),
+  listModels:     ()       => ipcRenderer.invoke('list-models'),
+  getDiagnostics: ()       => ipcRenderer.invoke('get-diagnostics'),
+  exportSession:  (md)     => ipcRenderer.invoke('export-session', { markdown: md }),
 
   // ── Sessions / Memory ─────────────────────────────────────────────────────
   getSessions:    ()       => ipcRenderer.invoke('get-sessions'),

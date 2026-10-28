@@ -50,7 +50,7 @@ test.describe('GhostMind E2E Tests', () => {
     await expect(logoName).toHaveText('GhostMind');
 
     const logoVersion = window.locator('#logo-version');
-    await expect(logoVersion).toHaveText('v2.0');
+    await expect(logoVersion).toHaveText('v3.4');
   });
 
   test('Preload script should expose the ghostmind API securely', async () => {

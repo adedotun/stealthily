@@ -1247,6 +1247,94 @@ ipcMain.handle('send-ai-request-stream', async (event, { requestId, messages, mo
   }
 });
 
+// ─── v3.4 RELIABILITY: probe, model list, diagnostics, export ───────────────
+// The v3.2/v3.3 test pass taught one lesson repeatedly: never *assume* the
+// outside world (model names, API behaviour) — check it and surface the
+// result honestly in the UI.
+
+// Truthful AI check: a real 1-token request with the saved key + selected
+// model. The renderer's "AI connected" pill is driven by this, not by the
+// mere presence of a key.
+ipcMain.handle('check-ai', async () => {
+  const settings = loadSettings();
+  if (!settings.apiKey) return { ok: false, error: 'No API key saved' };
+  const model = settings.model || 'claude-sonnet-5-5';
+  const started = Date.now();
+  try {
+    const body = {
+      model,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    };
+    if (/claude-(sonnet|opus|haiku|fable)-5/.test(model) && !settings.deepThinking) {
+      body.thinking = { type: 'between_tools' };
+    }
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': settings.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) return { ok: true, model, ms: Date.now() - started };
+    const t = await r.text();
+    let msg = `HTTP ${r.status}`;
+    try { msg = JSON.parse(t)?.error?.message || msg; } catch (_) {}
+    return { ok: false, model, error: `${msg} (HTTP ${r.status})` };
+  } catch (e) {
+    return { ok: false, model, error: e.message };
+  }
+});
+
+// Live model list from the API, so the Settings picker can't go stale the
+// way the hardcoded 4.x list did. Returns null on any failure — the
+// renderer then keeps its built-in fallback list.
+ipcMain.handle('list-models', async () => {
+  const settings = loadSettings();
+  if (!settings.apiKey) return null;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/models?limit=100', {
+      headers: {
+        'x-api-key': settings.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const models = (data.data || [])
+      .filter(m => m && typeof m.id === 'string' && m.id.startsWith('claude-'))
+      .map(m => ({ id: m.id, name: m.display_name || m.id }));
+    return models.length ? models : null;
+  } catch (_) {
+    return null;
+  }
+});
+
+// Local engine status for the diagnostics panel.
+ipcMain.handle('get-diagnostics', async () => {
+  let sidecarExists = false;
+  try { sidecarExists = fs.existsSync(resolveSidecarPath()); } catch (_) {}
+  return {
+    platform: process.platform,
+    version: app.getVersion(),
+    engine: {
+      bundled: !!resolveBundledEngine(),
+      python: resolvePythonPath() || null,
+      sidecar: sidecarExists,
+    },
+  };
+});
+
+// Save a Markdown export (transcript + chat) to the user's Downloads.
+ipcMain.handle('export-session', async (event, { markdown }) => {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const file = path.join(app.getPath('downloads'), `GhostMind-Session-${stamp}.md`);
+  await fs.promises.writeFile(file, String(markdown || ''), 'utf8');
+  return { path: file };
+});
+
 // ─── APP LIFECYCLE ────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   // Prevent multiple instances — must be inside whenReady (skip in test mode)

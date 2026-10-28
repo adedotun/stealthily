@@ -899,6 +899,25 @@ body, input, textarea, button, a, select, canvas, span, div {
 .pill.ok .dot { background: var(--acid); }
 .pill.live .dot { background: var(--red); animation: pillpulse 1.2s ease-in-out infinite; }
 @keyframes pillpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+/* v3.4: truthful AI pill states + diagnostics + suggestion chips + compact */
+.pill.bad .dot { background: var(--red); }
+.pill.checking .dot { background: var(--amber); animation: pillpulse 0.8s ease-in-out infinite; }
+#suggest-chips { display: none; gap: 6px; flex-wrap: wrap; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+#suggest-chips.visible { display: flex; }
+.schip {
+  background: var(--acid-dim); color: var(--text); border: 1px solid var(--line2);
+  border-radius: 999px; padding: 4px 11px; font-family: var(--font-ui);
+  font-size: 11.5px; cursor: pointer;
+}
+.schip:hover { border-color: var(--acid); }
+.diag-row { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; font-size: 12.5px; line-height: 1.45; }
+.diag-row .diag-ico { flex-shrink: 0; width: 16px; text-align: center; }
+.diag-row .diag-hint { color: var(--muted); font-size: 11.5px; display: block; }
+body.compact #messages, body.compact #input-area, body.compact #quick-bar { display: none !important; }
+#home-compact-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted2); font-family: var(--font-ui); font-size: 11px; font-weight: 500;
+}
 #home-setup-btn {
   margin-left: auto; background: none; border: none; cursor: pointer;
   color: var(--muted2); font-family: var(--font-ui); font-size: 11px; font-weight: 500;
@@ -1020,7 +1039,7 @@ body, input, textarea, button, a, select, canvas, span, div {
           </svg>
         </div>
         <span id="logo-name">GhostMind</span>
-        <span id="logo-version">v3.3</span>
+        <span id="logo-version">v3.4</span>
       </div>
     </div>
     <div id="titlebar-right">
@@ -1066,6 +1085,7 @@ body, input, textarea, button, a, select, canvas, span, div {
       <span class="pill" id="pill-call"><span class="dot"></span>Call audio</span>
       <span class="pill" id="pill-ai"><span class="dot"></span>AI connected</span>
       <button id="home-setup-btn" title="Run the friendly setup again">⚙ Setup</button>
+      <button id="home-compact-btn" title="Shrink to just the Listen button and transcript">🗗 Compact</button>
     </div>
   </div>
 
@@ -1085,6 +1105,7 @@ body, input, textarea, button, a, select, canvas, span, div {
     </div>
     <div id="live-summary" style="display:none; padding:7px 12px; font-size:12px; line-height:1.5; color:var(--text); background:var(--acid-dim); border-bottom:1px solid var(--line);"></div>
     <div id="live-partial" style="display:none; padding:6px 12px; font-size:12.5px; font-style:italic; opacity:0.55; border-bottom:1px solid var(--line);"></div>
+    <div id="suggest-chips"></div>
     <div id="transcript-scroll"></div>
   </div>
 
@@ -1171,6 +1192,15 @@ body, input, textarea, button, a, select, canvas, span, div {
       </div>
       <input id="memory-search" type="text" placeholder="🔍 Search past sessions…" style="width:100%;margin:10px 0 4px;padding:8px 11px;border-radius:999px;border:1px solid var(--line2);background:var(--bg3);color:var(--text);outline:none;font-family:var(--font-ui);font-size:12px;">
       <div id="memory-list"></div>
+      <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);">
+        <span style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--muted2);text-transform:uppercase;">ASK MY PAST SESSIONS</span>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <input id="ask-calls-input" type="text" placeholder="e.g. What did we decide about pricing?" style="flex:1;padding:8px 11px;border-radius:999px;border:1px solid var(--line2);background:var(--bg3);color:var(--text);outline:none;font-family:var(--font-ui);font-size:12px;">
+          <button class="snipe-btn" id="ask-calls-btn">ASK</button>
+        </div>
+        <div id="ask-calls-answer" style="display:none;margin-top:8px;font-size:12.5px;line-height:1.55;"></div>
+        <button class="snipe-btn" id="export-session-btn" style="margin-top:12px;">⬇ EXPORT CURRENT SESSION (.MD)</button>
+      </div>
     </div>
   </div>
 
@@ -1219,6 +1249,14 @@ body, input, textarea, button, a, select, canvas, span, div {
           <div class="setting-row-inline">
             <label>Deep Thinking (slower, more thorough)</label>
             <div class="toggle" id="t-deepthinking"></div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-inline">
+            <label>Health Check</label>
+            <button class="snipe-btn" id="run-checks-btn">🩺 RUN CHECKS</button>
+          </div>
+          <div id="diag-results" style="display:none;margin-top:6px;"></div>
           </div>
         </div>
         <div class="setting-row">

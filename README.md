@@ -1,4 +1,4 @@
-# 👻 GhostMind v3.3 — Native Electron App
+# 👻 GhostMind v3.4 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
@@ -8,6 +8,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.1:** effortless + a little magic — Keychain-encrypted API key, faster transcription, live call summary, automatic post-call summary with a follow-up email draft, and the groundwork for one-click installs (bundled engine) and auto-updates — see [What changed in v3.1](#what-changed-in-v31).
 **v3.2:** live-feeling transcription (provisional words appear while someone is still speaking) and a real database memory — see [What changed in v3.2](#what-changed-in-v32).
 **v3.3:** speed — chat answers now stream in token by token, the models' built-in "thinking" pause is off by default, and the default system prompt was rewritten for a glance-and-go copilot — see [What changed in v3.3](#what-changed-in-v33).
+**v3.4:** trust + polish — the app now verifies itself (truthful AI status, live model list, one-tap health check), transcription got smarter (Silero filtering, pre-roll, echo guard), and the call experience gained compact mode, live suggestion chips, session export, and ask-my-past-sessions — see [What changed in v3.4](#what-changed-in-v34).
 
 ---
 
@@ -227,6 +228,27 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.4
+
+- **The AI pill tells the truth.** "AI connected" is green only after a real 1-token probe request with your key and selected model succeeds (hover it to see the model and response time). Amber while checking, red with the actual error when it fails — no more green light over a dead connection.
+- **A model list that can't go stale.** The Settings model picker is populated from the Anthropic API's live model list (your saved model is always kept as an option); the built-in list remains as a fallback when offline. This removes the failure mode that broke chat when a hardcoded model was retired.
+- **🩺 Run checks.** A Health Check button in Settings verifies, in plain English: API key saved, AI answering, microphone present, call-audio device (BlackHole/Loopback) present, and the transcription engine ready — each with a fix hint when it fails.
+- **Smarter transcription.** Final segments now pass through faster-whisper's built-in **Silero VAD** filter, stripping non-speech (breaths, keyboard, room noise) that produced phantom lines (partials skip it for speed). The segmenter gained a **300ms pre-roll** so word onsets are no longer clipped, and an **adaptive noise floor** that makes it more sensitive in quiet rooms without changing behaviour in noise. Segmenter tests still pass 5/5.
+- **Echo guard.** If your mic starts transcribing the caller's own words back as "You" (speaker leak), GhostMind warns you once a minute with the fix: headphones, or check the call app's mic routing.
+- **Compact mode.** A 🗗 Compact button on the home bar hides chat/input and shrinks the window to the Listen button + pills + live transcript for during-call minimalism; 🗖 Expand restores.
+- **Live suggestion chips.** When the caller asks a question, one-tap chips appear over the transcript — ✍️ Draft my reply, ❓ Explain that, 📋 Summarize so far — and dismiss themselves after 25 seconds.
+- **Export + ask your history.** The Memory tab can export the current session (transcript + chat) as a Markdown file to Downloads, and **Ask my past sessions** answers questions over your saved session summaries, saying so plainly when they don't cover the question.
+
+## Release checklist (first public release)
+
+1. `npm install` (picks up electron-updater if not yet installed)
+2. `npm run setup:sidecar` then `npm run build:sidecar` — builds the bundled `ghostmind-whisper` engine into `sidecar/bin/` (macOS only; must be built on a Mac)
+3. `npm run build:mac` — produces `dist/GhostMind.dmg`, `dist/GhostMind.zip`, `dist/latest-mac.yml`
+4. GitHub → Releases → Draft new release, tag `v3.4.0`, attach all three files, publish (not prerelease) — the evergreen link `https://github.com/adedotun/stealthily/releases/latest/download/GhostMind.dmg` then serves this build
+5. Verify auto-update: install the previous release, then launch it after publishing — it should offer this update
+6. Verify stealth on Webex: join a Webex meeting from a phone as guest, share the Mac screen, confirm GhostMind is invisible on the phone's view
+7. Note: the app is unsigned — first-open needs right-click → Open until an Apple Developer certificate is added
 
 ## What changed in v3.3
 

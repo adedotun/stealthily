@@ -82,6 +82,7 @@ window.ghostmind.on('external-transcript', ({ line, partial, speaker }) => {
   state.transcript.push(line);
   addTranscriptLine(line);
   processTranscriptLine(line);
+  trackEchoAndChips(line);
 
   if (state.transcript.length % 6 === 0 && state.settings.proactiveMode) {
     triggerProactiveInsight();
@@ -249,7 +250,18 @@ function updatePills() {
   const mic  = document.getElementById('pill-mic');
   const call = document.getElementById('pill-call');
   const ai   = document.getElementById('pill-ai');
-  if (ai)   ai.classList.toggle('ok', !!(state.settings && state.settings.apiKey));
+  if (ai) {
+    // v3.4: the AI pill tells the truth — green only after a real probe
+    // request succeeded (see checkAIConnection below). Before the first
+    // probe completes it falls back to "a key exists".
+    ai.classList.toggle('ok', aiProbe.state === 'ok' || (aiProbe.state === 'unknown' && !!(state.settings && state.settings.apiKey)));
+    ai.classList.toggle('bad', aiProbe.state === 'fail');
+    ai.classList.toggle('checking', aiProbe.state === 'checking');
+    ai.title = aiProbe.state === 'ok' ? `AI verified — ${aiProbe.model} answered in ${aiProbe.ms}ms`
+      : aiProbe.state === 'fail' ? `AI check failed: ${aiProbe.error}`
+      : aiProbe.state === 'checking' ? 'Checking the AI connection…'
+      : 'AI connection not verified yet';
+  }
   const youSel  = document.getElementById('s-you-device');
   const themSel = document.getElementById('s-them-device');
   if (mic  && youSel)  mic.classList.toggle('ok', youSel.options.length > 0);
@@ -260,6 +272,218 @@ document.getElementById('home-listen-btn')?.addEventListener('click', () => {
   document.getElementById('local-transcription-toggle-btn')?.click();
 });
 document.getElementById('home-setup-btn')?.addEventListener('click', () => openWizard());
+
+// ─── v3.4: TRUTHFUL AI PILL, LIVE MODEL LIST, DIAGNOSTICS ────────────────────
+let aiProbe = { state: 'unknown', model: '', ms: 0, error: '', at: 0 };
+
+async function checkAIConnection(force = false) {
+  if (!state.settings || !state.settings.apiKey) {
+    aiProbe = { state: 'unknown', model: '', ms: 0, error: '', at: Date.now() };
+    updatePills();
+    return;
+  }
+  if (!force && aiProbe.state === 'ok' && Date.now() - aiProbe.at < 30000) return;
+  aiProbe = { ...aiProbe, state: 'checking' };
+  updatePills();
+  try {
+    const r = await window.ghostmind.checkAI();
+    aiProbe = r.ok
+      ? { state: 'ok', model: r.model || '', ms: r.ms || 0, error: '', at: Date.now() }
+      : { state: 'fail', model: r.model || '', ms: 0, error: r.error || 'Unknown error', at: Date.now() };
+  } catch (e) {
+    aiProbe = { state: 'fail', model: '', ms: 0, error: e.message, at: Date.now() };
+  }
+  updatePills();
+}
+
+async function populateModels() {
+  const sel = document.getElementById('s-model');
+  if (!sel) return;
+  try {
+    const models = await window.ghostmind.listModels();
+    if (!models || !models.length) return; // keep the built-in fallback list
+    const current = (state.settings && state.settings.model) || sel.value;
+    sel.innerHTML = '';
+    for (const m of models.slice(0, 12)) {
+      const o = document.createElement('option');
+      o.value = m.id;
+      o.textContent = m.name === m.id ? m.id : `${m.name} — ${m.id}`;
+      sel.appendChild(o);
+    }
+    if (current && ![...sel.options].some(o => o.value === current)) {
+      const o = document.createElement('option');
+      o.value = current;
+      o.textContent = `${current} (saved)`;
+      sel.prepend(o);
+    }
+    if (current) sel.value = current;
+  } catch (_) {}
+}
+
+document.getElementById('run-checks-btn')?.addEventListener('click', async () => {
+  const box = document.getElementById('diag-results');
+  if (!box) return;
+  box.style.display = 'block';
+  box.innerHTML = '';
+  const mkRow = (icon, title, hint) => {
+    const row = document.createElement('div');
+    row.className = 'diag-row';
+    const ico = document.createElement('span');
+    ico.className = 'diag-ico';
+    ico.textContent = icon;
+    const body = document.createElement('span');
+    body.textContent = title;
+    if (hint) {
+      const h = document.createElement('span');
+      h.className = 'diag-hint';
+      h.textContent = hint;
+      body.appendChild(h);
+    }
+    row.appendChild(ico);
+    row.appendChild(body);
+    box.appendChild(row);
+  };
+  mkRow('⏳', 'Running checks…', '');
+
+  const hasKey = !!(state.settings && state.settings.apiKey);
+  const probe = hasKey ? await window.ghostmind.checkAI().catch(e => ({ ok: false, error: e.message })) : { ok: false, error: 'No key' };
+  if (probe.ok) checkAIConnection(true);
+
+  let devs = [];
+  try {
+    const all = await navigator.mediaDevices.enumerateDevices();
+    devs = all.filter(d => d.kind === 'audioinput');
+  } catch (_) {}
+  const labels = devs.map(d => (d.label || '').toLowerCase());
+  const themSel = document.getElementById('s-them-device');
+  const callOk = !!(themSel && themSel.value) || labels.some(l => l.includes('blackhole') || l.includes('loopback'));
+  const diag = await window.ghostmind.getDiagnostics().catch(() => null);
+
+  box.innerHTML = '';
+  mkRow(hasKey ? '✅' : '❌', 'API key saved', hasKey ? '' : 'Add your Anthropic key in Settings, then Save.');
+  mkRow(probe.ok ? '✅' : '❌', probe.ok ? `AI answers — ${probe.model} in ${probe.ms}ms` : 'AI is not answering', probe.ok ? '' : (probe.error || ''));
+  mkRow(devs.length ? '✅' : '❌', devs.length ? `Microphone found — ${devs.length} input device${devs.length === 1 ? '' : 's'}` : 'No microphone found', devs.length ? '' : 'Check the macOS Microphone permission, and that a mic is connected.');
+  mkRow(callOk ? '✅' : '⚠️', 'Call audio device', callOk ? '' : 'No BlackHole/Loopback device selected — GhostMind can only hear the caller through one. See the README routing guide.');
+  if (diag) {
+    const eng = diag.engine || {};
+    const engOk = eng.bundled || (eng.python && eng.sidecar);
+    mkRow(engOk ? '✅' : '❌', eng.bundled ? 'Transcription engine — bundled binary' : 'Transcription engine — Python sidecar', engOk ? '' : 'Run: npm run setup:sidecar (README install guide).');
+  }
+});
+
+// ─── v3.4: ECHO GUARD + LIVE SUGGESTION CHIPS ────────────────────────────────
+const themRecent = [];
+let lastEchoWarnAt = 0;
+let chipsTimer = null;
+
+function wordSet(t) {
+  return new Set(t.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
+}
+
+function trackEchoAndChips(line) {
+  const now = Date.now();
+  if (line.startsWith('[Them]')) {
+    const text = line.replace(/^\[Them\]\s*/, '');
+    themRecent.push({ text, t: now });
+    while (themRecent.length && now - themRecent[0].t > 5000) themRecent.shift();
+    if (text.includes('?')) showSuggestChips();
+    return;
+  }
+  if (line.startsWith('[You]')) {
+    const yw = wordSet(line.replace(/^\[You\]\s*/, ''));
+    if (yw.size < 4) return;
+    for (const th of themRecent) {
+      const tw = wordSet(th.text);
+      if (!tw.size) continue;
+      let inter = 0;
+      yw.forEach(w => { if (tw.has(w)) inter++; });
+      const sim = inter / Math.max(yw.size, tw.size);
+      if (sim >= 0.7 && now - lastEchoWarnAt > 60000) {
+        lastEchoWarnAt = now;
+        addMsg('system', '⚠ Echo check: your microphone seems to be picking up the caller. Headphones fix this — or check that your call app is using your real microphone, not Loopback/BlackHole.');
+        break;
+      }
+    }
+  }
+}
+
+function showSuggestChips() {
+  const box = document.getElementById('suggest-chips');
+  if (!box) return;
+  box.innerHTML = '';
+  const chips = [
+    ['✍️ Draft my reply', 'Draft my reply to the caller'],
+    ['❓ Explain that', 'Explain what the caller just said, simply and briefly'],
+    ['📋 Summarize so far', 'Summarize the call so far'],
+  ];
+  for (const [label, prompt] of chips) {
+    const b = document.createElement('button');
+    b.className = 'schip';
+    b.textContent = label;
+    b.addEventListener('click', () => { hideSuggestChips(); askAI(prompt); });
+    box.appendChild(b);
+  }
+  box.classList.add('visible');
+  clearTimeout(chipsTimer);
+  chipsTimer = setTimeout(hideSuggestChips, 25000);
+}
+
+function hideSuggestChips() {
+  const box = document.getElementById('suggest-chips');
+  if (box) { box.classList.remove('visible'); box.innerHTML = ''; }
+}
+
+// ─── v3.4: COMPACT MODE, EXPORT, ASK-MY-CALLS ────────────────────────────────
+document.getElementById('home-compact-btn')?.addEventListener('click', () => {
+  const on = document.body.classList.toggle('compact');
+  const btn = document.getElementById('home-compact-btn');
+  if (btn) btn.textContent = on ? '🗖 Expand' : '🗗 Compact';
+  if (on) document.getElementById('transcript-bar')?.classList.add('visible');
+  try { window.ghostmind.resizeWindow(window.innerWidth, on ? 320 : 700); } catch (_) {}
+});
+
+document.getElementById('export-session-btn')?.addEventListener('click', async () => {
+  const lines = [`# GhostMind session — ${new Date().toLocaleString()}`];
+  if (state.transcript.length) {
+    lines.push('', '## Call transcript', '', ...state.transcript);
+  }
+  const chat = (state.messages || []).filter(m => typeof m.content === 'string');
+  if (chat.length) {
+    lines.push('', '## Chat', '');
+    for (const m of chat) lines.push(`**${m.role === 'user' ? 'You' : 'GhostMind'}:** ${m.content}`, '');
+  }
+  try {
+    const r = await window.ghostmind.exportSession(lines.join('\n'));
+    addMsg('system', `⬇ Session exported to ${r.path}`);
+    switchTab('chat');
+  } catch (e) {
+    addMsg('system', `✗ Export failed: ${e.message}`);
+  }
+});
+
+document.getElementById('ask-calls-btn')?.addEventListener('click', async () => {
+  const input = document.getElementById('ask-calls-input');
+  const out = document.getElementById('ask-calls-answer');
+  const q = (input?.value || '').trim();
+  if (!q || !out) return;
+  out.style.display = 'block';
+  if (!state.sessions || !state.sessions.length) {
+    out.textContent = 'No saved sessions yet — have a call, save the session, then ask about it here.';
+    return;
+  }
+  out.textContent = 'Thinking…';
+  try {
+    const ctx = state.sessions.map(s => `- ${s.date}: ${s.summary}`).join('\n');
+    const data = await window.ghostmind.sendAIRequest({
+      messages: [{ role: 'user', content: `Here are summaries of my past GhostMind sessions:\n\n${ctx}\n\nQuestion: ${q}\n\nAnswer using only these summaries. If they don't cover the question, say so plainly.` }],
+      model: 'claude-haiku-5-5',
+      maxTokens: 600,
+    });
+    out.innerHTML = renderMarkdown(data.content?.[0]?.text || 'No answer.');
+  } catch (e) {
+    out.textContent = `✗ ${e.message}`;
+  }
+});
 
 // Wizard ---------------------------------------------------------------
 let wizStep = 1;
@@ -418,6 +642,8 @@ function applySettings(s) {
   if (s.youDeviceId)  sid('s-you-device').value  = s.youDeviceId;
   if (s.themDeviceId) sid('s-them-device').value = s.themDeviceId;
   updatePills();
+  checkAIConnection();
+  populateModels();
 }
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
@@ -446,6 +672,8 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   };
   await window.ghostmind.saveSettings(s);
   state.settings = s;
+  checkAIConnection(true);
+  populateModels();
   setStatus(s.apiKey ? 'ready' : 'offline');
   addMsg('system', '✓ Settings saved');
   switchTab('chat');

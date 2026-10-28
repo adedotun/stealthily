@@ -1,5 +1,5 @@
 'use strict';
-// node --test tests/segmenter.test.js
+// node --test tests-local/segmenter.test.js
 const { test } = require('node:test');
 const assert = require('node:assert');
 const { Segmenter } = require('../src/renderer/local/segmenter');

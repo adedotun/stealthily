@@ -1,6 +1,17 @@
 {
   "build": {
     "appId": "com.ghostmind.app",
+    "artifactName": "GhostMind.${ext}",
+    "asarUnpack": [
+      "sidecar/bin/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "adedotun",
+        "repo": "stealthily"
+      }
+    ],
     "extraResources": [
       {
         "filter": [
@@ -15,8 +26,8 @@
       "src/**/*",
       "sidecar/transcribe_sidecar.py",
       "sidecar/requirements.txt",
-      "package.json",
-      "sidecar/bin/**/*"
+      "sidecar/bin/**/*",
+      "package.json"
     ],
     "mac": {
       "category": "public.app-category.productivity",
@@ -38,22 +49,12 @@
       "target": [
         "nsis"
       ]
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "adedotun",
-        "repo": "stealthily"
-      }
-    ],
-    "asarUnpack": [
-      "sidecar/bin/**"
-    ]
+    }
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
   },
-  "description": "Stealth AI assistant \u2014 invisible to all screen capture, with on-device call transcription",
+  "description": "Stealth AI assistant — invisible to all screen capture, with on-device call transcription",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "electron": "^41.7.0",
@@ -63,14 +64,14 @@
   "name": "ghostmind",
   "scripts": {
     "build:all": "electron-builder --mac --win",
+    "build:sidecar": "sidecar/.venv/bin/pip install pyinstaller && sidecar/.venv/bin/pyinstaller --noconfirm --distpath sidecar/bin --workpath /tmp/ghostmind-pyi-build sidecar/ghostmind-whisper.spec",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "dev": "electron . --dev",
     "setup:sidecar": "PY=python3.14; command -v $PY >/dev/null 2>&1 || PY=python3.12; command -v $PY >/dev/null 2>&1 || PY=python3; $PY -m venv sidecar/.venv && sidecar/.venv/bin/pip install -r sidecar/requirements.txt",
     "start": "electron .",
     "test": "playwright test",
-    "test:local": "node --test tests-local/*.test.js",
-    "build:sidecar": "sidecar/.venv/bin/pip install pyinstaller && sidecar/.venv/bin/pyinstaller --noconfirm --distpath sidecar/bin --workpath /tmp/ghostmind-pyi-build sidecar/ghostmind-whisper.spec"
+    "test:local": "node --test tests-local/*.test.js"
   },
-  "version": "3.3.0"
+  "version": "3.4.0"
 }
