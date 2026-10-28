@@ -12,6 +12,15 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 
 ---
 
+## ⬇ Download
+
+**[Download GhostMind for Mac (.dmg)](https://github.com/adedotun/stealthily/releases/latest/download/GhostMind.dmg)** — this link always serves the latest stable release. ([.zip version](https://github.com/adedotun/stealthily/releases/latest/download/GhostMind.zip) if you prefer.)
+
+- macOS on Apple Silicon. The link goes live once the first release is published on the [Releases page](https://github.com/adedotun/stealthily/releases) — until then it returns a 404.
+- The app isn't code-signed yet, so on first launch macOS will warn about an unidentified developer: **right-click the app → Open**.
+- You'll need your own free [Anthropic API key](https://console.anthropic.com) (the setup wizard walks you through it), and for call transcription, the free BlackHole driver — the Installation Guide below covers both.
+- Building from source instead? Follow the Installation Guide below.
+
 ## Installation Guide
 
 Everything GhostMind needs, in the order to install it. macOS is the primary target; Windows notes are inline.
