@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GhostMind</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 /* ── DESIGN SYSTEM ────────────────────────────────────────────────────────── */
 :root {
@@ -28,11 +28,11 @@
   --text:      #d8d8d8;
   --text-dim:  #888;
 
-  --font-ui:   'Syne', sans-serif;
-  --font-mono: 'Space Mono', monospace;
+  --font-ui:   'Inter', -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 
-  --radius:    6px;
-  --radius-lg: 12px;
+  --radius:    10px;
+  --radius-lg: 20px;
 
   --ease-snap: cubic-bezier(0.2, 0, 0, 1);
 }
@@ -98,7 +98,7 @@ body {
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--bg0);
-  box-shadow: 0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,255,136,0.05);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px var(--acid-dim);
 }
 
 /* ── TITLEBAR / HEADER ────────────────────────────────────────────────────── */
@@ -866,6 +866,120 @@ body, input, textarea, button, a, select, canvas, span, div {
   color: var(--acid);
   margin-bottom: 4px;
 }
+/* ── FRIENDLY UI (v3.0) ─────────────────────────────────────────────────── */
+#home-bar {
+  padding: 12px 14px 10px;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 9px;
+}
+#home-listen-btn {
+  width: 100%;
+  padding: 13px 16px;
+  border: none;
+  border-radius: 999px;
+  background: var(--acid);
+  color: #06130c;
+  font-family: var(--font-ui);
+  font-size: 15px; font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px var(--acid-dim);
+  transition: transform 0.12s var(--ease-snap), box-shadow 0.12s;
+}
+#home-listen-btn:hover { transform: translateY(-1px); }
+#home-listen-btn.listening { background: var(--amber); color: #1a1005; }
+#pills-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 500; color: var(--text-dim);
+  background: var(--bg3); border: 1px solid var(--line);
+  padding: 4px 10px; border-radius: 999px;
+}
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted2); flex-shrink: 0; }
+.pill.ok .dot { background: var(--acid); }
+.pill.live .dot { background: var(--red); animation: pillpulse 1.2s ease-in-out infinite; }
+@keyframes pillpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+#home-setup-btn {
+  margin-left: auto; background: none; border: none; cursor: pointer;
+  color: var(--muted2); font-family: var(--font-ui); font-size: 11px; font-weight: 500;
+}
+#home-setup-btn:hover { color: var(--acid); }
+
+/* Friendlier quick-action chips */
+.qbtn {
+  border-radius: 999px !important;
+  padding: 7px 13px !important;
+  font-size: 12px !important;
+  font-weight: 500;
+}
+
+/* Chat-style transcript bubbles */
+#transcript-scroll .t-line {
+  margin: 0 0 8px;
+  padding: 8px 11px;
+  background: var(--bg3);
+  border-radius: 12px;
+  line-height: 1.45;
+  font-size: 12.5px;
+}
+#transcript-scroll .t-line .t-name {
+  display: block;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+  margin-bottom: 2px;
+}
+#transcript-scroll .t-line.you  { border-left: 3px solid var(--blue); }
+#transcript-scroll .t-line.you  .t-name { color: var(--blue); }
+#transcript-scroll .t-line.them { border-left: 3px solid var(--acid); }
+#transcript-scroll .t-line.them .t-name { color: var(--acid); }
+
+/* Setup wizard */
+#wizard {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  display: none;
+  align-items: center; justify-content: center;
+  padding: 18px;
+}
+#wizard.open { display: flex; }
+.wiz-card {
+  background: var(--bg1);
+  border: 1px solid var(--line2);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  width: 100%; max-width: 400px;
+  padding: 26px 24px 20px;
+  max-height: calc(100vh - 36px); overflow-y: auto;
+}
+.wiz-emoji { font-size: 38px; text-align: center; margin-bottom: 8px; }
+.wiz-title { font-size: 19px; font-weight: 700; text-align: center; color: var(--text); margin-bottom: 6px; }
+.wiz-sub { font-size: 13px; color: var(--text-dim); text-align: center; line-height: 1.55; margin-bottom: 16px; }
+.wiz-step { display: none; }
+.wiz-step.active { display: block; }
+.wiz-label { display: block; font-size: 12px; font-weight: 600; color: var(--text); margin: 12px 0 5px; }
+.wiz-input, .wiz-select {
+  width: 100%; padding: 11px 12px;
+  background: var(--bg3); color: var(--text);
+  border: 1px solid var(--line2); border-radius: 10px;
+  font-family: var(--font-ui); font-size: 13px; outline: none;
+}
+.wiz-input:focus, .wiz-select:focus { border-color: var(--acid); }
+.wiz-btn {
+  width: 100%; padding: 12px; margin-top: 16px;
+  border: none; border-radius: 999px;
+  background: var(--acid); color: #06130c;
+  font-family: var(--font-ui); font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.wiz-btn.secondary { background: var(--bg4); color: var(--text); }
+.wiz-skip {
+  display: block; margin: 12px auto 0; background: none; border: none; cursor: pointer;
+  color: var(--muted2); font-family: var(--font-ui); font-size: 12px;
+}
+.wiz-skip:hover { color: var(--text); }
+.wiz-dots { text-align: center; margin-top: 16px; color: var(--muted2); font-size: 10px; letter-spacing: 4px; }
+#wiz-level { height: 10px; background: var(--bg4); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+#wiz-level-fill { height: 100%; width: 0%; background: var(--acid); border-radius: 999px; transition: width 0.08s linear; }
+.wiz-note { font-size: 12px; color: var(--text-dim); line-height: 1.55; background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 12px; }
 </style>
 </head>
 <body>
@@ -890,7 +1004,7 @@ body, input, textarea, button, a, select, canvas, span, div {
           </svg>
         </div>
         <span id="logo-name">GhostMind</span>
-        <span id="logo-version">v2.3</span>
+        <span id="logo-version">v3.0</span>
       </div>
     </div>
     <div id="titlebar-right">
@@ -925,6 +1039,17 @@ body, input, textarea, button, a, select, canvas, span, div {
     <div class="tab" data-panel="settings">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       Settings
+    </div>
+  </div>
+
+  <!-- HOME BAR (v3.0): one big friendly button + plain-language status -->
+  <div id="home-bar">
+    <button id="home-listen-btn">🎧 Start Listening</button>
+    <div id="pills-row">
+      <span class="pill" id="pill-mic"><span class="dot"></span>Microphone</span>
+      <span class="pill" id="pill-call"><span class="dot"></span>Call audio</span>
+      <span class="pill" id="pill-ai"><span class="dot"></span>AI connected</span>
+      <button id="home-setup-btn" title="Run the friendly setup again">⚙ Setup</button>
     </div>
   </div>
 
@@ -996,7 +1121,7 @@ body, input, textarea, button, a, select, canvas, span, div {
       <div id="local-audio-panel" style="display:flex; flex-direction:column; gap:12px; border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:var(--bg2);">
         <div style="font-family:var(--font-mono); font-size:10px; letter-spacing:1px; color:var(--acid); display:flex; align-items:center; gap:6px;">
           <span style="display:inline-block; width:6px; height:6px; background:var(--acid); border-radius:50%; box-shadow:0 0 8px var(--acid);"></span>
-          LOCAL TRANSCRIPTION · ON-DEVICE WHISPER
+          LISTEN TO MY CALL · PRIVATE — STAYS ON THIS DEVICE
         </div>
         <div style="font-size:11px; color:var(--text-dim); line-height:1.6;">
           Captures two tracks on this machine and transcribes them locally — no browser tab, no cloud speech service:
@@ -1166,6 +1291,49 @@ body, input, textarea, button, a, select, canvas, span, div {
 
   <!-- PROACTIVE BADGE -->
   <div id="proactive-badge"></div>
+
+  <!-- SETUP WIZARD (v3.0) -->
+  <div id="wizard">
+    <div class="wiz-card">
+      <div class="wiz-step active" data-step="1">
+        <div class="wiz-emoji">👻</div>
+        <div class="wiz-title">Welcome to GhostMind</div>
+        <div class="wiz-sub">Your invisible AI helper for calls and meetings. It listens, transcribes and helps you answer — and nobody on the call can see it. Setup takes about 2 minutes.</div>
+        <button class="wiz-btn" id="wiz-start-btn">Let's get set up</button>
+        <button class="wiz-skip" id="wiz-skip-1">Skip for now</button>
+      </div>
+      <div class="wiz-step" data-step="2">
+        <div class="wiz-emoji">🔑</div>
+        <div class="wiz-title">Connect your AI</div>
+        <div class="wiz-sub">GhostMind thinks with Claude. Paste your Anthropic API key below — it's stored only on this computer. You can get one at console.anthropic.com.</div>
+        <label class="wiz-label" for="wiz-key">Anthropic API key</label>
+        <input class="wiz-input" id="wiz-key" type="password" placeholder="sk-ant-..." autocomplete="off">
+        <button class="wiz-btn" id="wiz-key-btn">Save &amp; continue</button>
+        <button class="wiz-skip" id="wiz-skip-2">Skip this step</button>
+      </div>
+      <div class="wiz-step" data-step="3">
+        <div class="wiz-emoji">🎙️</div>
+        <div class="wiz-title">Check your sound</div>
+        <div class="wiz-sub">Pick your microphone, then tap Test and speak — the green bar should dance. "Call audio" is how GhostMind hears the other person (usually BlackHole or Loopback).</div>
+        <label class="wiz-label" for="wiz-you">Your microphone</label>
+        <select class="wiz-select" id="wiz-you"></select>
+        <label class="wiz-label" for="wiz-them">Call audio (the other person)</label>
+        <select class="wiz-select" id="wiz-them"></select>
+        <div id="wiz-level"><div id="wiz-level-fill"></div></div>
+        <button class="wiz-btn secondary" id="wiz-test-btn">🎤 Test my voice</button>
+        <button class="wiz-btn" id="wiz-sound-btn">Sounds good — continue</button>
+        <button class="wiz-skip" id="wiz-skip-3">Skip this step</button>
+      </div>
+      <div class="wiz-step" data-step="4">
+        <div class="wiz-emoji">✅</div>
+        <div class="wiz-title">One last thing</div>
+        <div class="wiz-sub">macOS may ask GhostMind for two permissions. When it does, click Allow — that's completely normal.</div>
+        <div class="wiz-note">🎙️ <b>Microphone</b> — so it can hear you.<br>🖥️ <b>Screen Recording</b> — only used when <i>you</i> press the screenshot button (Cmd+Shift+S). Nothing is recorded otherwise.</div>
+        <button class="wiz-btn" id="wiz-finish-btn">Done — start using GhostMind</button>
+      </div>
+      <div class="wiz-dots" id="wiz-dots">● ○ ○ ○</div>
+    </div>
+  </div>
 
 </div>
 <script src="local/wav.js"></script>

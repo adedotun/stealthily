@@ -33,6 +33,10 @@ function handleInit({ settings, sessions, permissions }) {
   showStartupHints(state.settings, permissions);
   refreshPermissionStatus(permissions);
   populateAudioDevices();
+  // First run (no AI key yet): greet with the friendly setup wizard.
+  if (!state.settings.apiKey && !state.settings.anthropicKey) {
+    setTimeout(() => openWizard(), 600);
+  }
 }
 
 window.ghostmind.on('init', handleInit);
@@ -74,6 +78,7 @@ window.ghostmind.on('external-state', ({ active }) => {
     btn.textContent = active ? '⏹ Stop Transcription' : '🎙 Start Transcription';
     btn.style.color = active ? 'var(--amber)' : 'var(--acid)';
   }
+  if (state.callCaptureWanted) syncHomeListen(active);
 });
 
 // Fetch initial data immediately on load to prevent race condition in packaged app
@@ -127,6 +132,156 @@ window.ghostmind.on('focus-input', () => {
   document.getElementById('chat-input').focus();
 });
 
+// ─── FRIENDLY HOME BAR + SETUP WIZARD (v3.0) ─────────────────────────────────
+function syncHomeListen(active) {
+  const b = document.getElementById('home-listen-btn');
+  if (!b) return;
+  b.textContent = active ? '⏹ Stop Listening' : '🎧 Start Listening';
+  b.classList.toggle('listening', !!active);
+  const call = document.getElementById('pill-call');
+  if (call) {
+    call.classList.toggle('live', !!active);
+    if (active) call.classList.add('ok');
+  }
+}
+
+function updatePills() {
+  const mic  = document.getElementById('pill-mic');
+  const call = document.getElementById('pill-call');
+  const ai   = document.getElementById('pill-ai');
+  if (ai)   ai.classList.toggle('ok', !!(state.settings && state.settings.apiKey));
+  const youSel  = document.getElementById('s-you-device');
+  const themSel = document.getElementById('s-them-device');
+  if (mic  && youSel)  mic.classList.toggle('ok', youSel.options.length > 0);
+  if (call && themSel) call.classList.toggle('ok', !!themSel.value);
+}
+
+document.getElementById('home-listen-btn')?.addEventListener('click', () => {
+  document.getElementById('local-transcription-toggle-btn')?.click();
+});
+document.getElementById('home-setup-btn')?.addEventListener('click', () => openWizard());
+
+// Wizard ---------------------------------------------------------------
+let wizStep = 1;
+function wizShow(step) {
+  wizStep = step;
+  document.querySelectorAll('.wiz-step').forEach(el => {
+    el.classList.toggle('active', Number(el.dataset.step) === step);
+  });
+  const dots = document.getElementById('wiz-dots');
+  if (dots) dots.textContent = [1, 2, 3, 4].map(i => (i === step ? '●' : '○')).join(' ');
+}
+function openWizard() {
+  const w = document.getElementById('wizard');
+  if (!w) return;
+  const keyInput = document.getElementById('wiz-key');
+  if (keyInput && state.settings?.apiKey) keyInput.value = state.settings.apiKey;
+  w.classList.add('open');
+  wizShow(1);
+}
+function closeWizard() {
+  document.getElementById('wizard')?.classList.remove('open');
+  stopWizTest();
+}
+
+let wizStream = null, wizRaf = null;
+function stopWizTest() {
+  if (wizRaf) cancelAnimationFrame(wizRaf);
+  wizRaf = null;
+  if (wizStream) { wizStream.getTracks().forEach(t => t.stop()); wizStream = null; }
+  const fill = document.getElementById('wiz-level-fill');
+  if (fill) fill.style.width = '0%';
+}
+
+async function wizFillDevices() {
+  try {
+    try {
+      const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+      tmp.getTracks().forEach(t => t.stop());
+    } catch (_) {}
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+    const fill = (id, preferCall) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      sel.innerHTML = '';
+      devices.forEach((d, i) => {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Microphone ${i + 1}`;
+        sel.appendChild(opt);
+      });
+      const wanted = preferCall ? state.settings?.themDeviceId : state.settings?.youDeviceId;
+      if (wanted && devices.some(d => d.deviceId === wanted)) sel.value = wanted;
+      else if (preferCall) {
+        const bh = devices.findIndex(d => /blackhole|loopback/i.test(d.label || ''));
+        if (bh >= 0) sel.selectedIndex = bh;
+      }
+    };
+    fill('wiz-you', false);
+    fill('wiz-them', true);
+  } catch (e) { console.warn('Wizard device list failed', e); }
+}
+
+async function wizSave(patch) {
+  const current = (await window.ghostmind.getSettings()) || {};
+  const merged = { ...current, ...(state.settings || {}), ...patch };
+  await window.ghostmind.saveSettings(merged);
+  state.settings = merged;
+  applySettings(merged);
+  return merged;
+}
+
+document.getElementById('wiz-start-btn')?.addEventListener('click', () => wizShow(2));
+document.getElementById('wiz-skip-1')?.addEventListener('click', closeWizard);
+document.getElementById('wiz-skip-2')?.addEventListener('click', () => { wizFillDevices(); wizShow(3); });
+document.getElementById('wiz-skip-3')?.addEventListener('click', () => wizShow(4));
+document.getElementById('wiz-key-btn')?.addEventListener('click', async () => {
+  const key = document.getElementById('wiz-key').value.trim();
+  if (key) await wizSave({ apiKey: key, anthropicKey: key });
+  await wizFillDevices();
+  wizShow(3);
+});
+document.getElementById('wiz-test-btn')?.addEventListener('click', async () => {
+  stopWizTest();
+  try {
+    const deviceId = document.getElementById('wiz-you').value;
+    wizStream = await navigator.mediaDevices.getUserMedia({
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+    });
+    const ctx = new AudioContext();
+    const src = ctx.createMediaStreamSource(wizStream);
+    const an = ctx.createAnalyser();
+    an.fftSize = 512;
+    src.connect(an);
+    const buf = new Uint8Array(an.fftSize);
+    const fill = document.getElementById('wiz-level-fill');
+    const started = Date.now();
+    const tick = () => {
+      an.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (const v of buf) { const d = (v - 128) / 128; sum += d * d; }
+      const rms = Math.sqrt(sum / buf.length);
+      if (fill) fill.style.width = Math.min(100, Math.round(rms * 260)) + '%';
+      if (Date.now() - started < 6000) { wizRaf = requestAnimationFrame(tick); }
+      else { stopWizTest(); ctx.close(); }
+    };
+    tick();
+  } catch (e) {
+    addMsg('system', '⚠ Microphone test failed — check the Microphone permission in macOS Settings');
+  }
+});
+document.getElementById('wiz-sound-btn')?.addEventListener('click', async () => {
+  stopWizTest();
+  const you  = document.getElementById('wiz-you').value;
+  const them = document.getElementById('wiz-them').value;
+  await wizSave({ youDeviceId: you, themDeviceId: them, transcriptionMethod: 'local' });
+  wizShow(4);
+});
+document.getElementById('wiz-finish-btn')?.addEventListener('click', () => {
+  closeWizard();
+  addMsg('system', '✅ You are all set — tap 🎧 Start Listening whenever a call begins');
+});
+
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 // Themes are pure CSS-variable sets in index.html keyed by data-theme.
 function applyTheme(name) {
@@ -159,6 +314,7 @@ function applySettings(s) {
   // apply the saved picks once options exist.
   if (s.youDeviceId)  sid('s-you-device').value  = s.youDeviceId;
   if (s.themDeviceId) sid('s-them-device').value = s.themDeviceId;
+  updatePills();
 }
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
@@ -622,6 +778,7 @@ async function populateAudioDevices() {
     const themSel = document.getElementById('s-them-device');
     if (youSel && !state.settings.youDeviceId)  state.settings.youDeviceId  = youSel.value;
     if (themSel && !state.settings.themDeviceId) state.settings.themDeviceId = themSel.value;
+    updatePills();
   } catch (e) {
     console.log('Could not enumerate audio devices:', e);
   }
@@ -683,6 +840,7 @@ async function stopLocalCapture() {
   document.getElementById('audio-waveform-big').style.display = 'none';
   const btn = document.getElementById('local-transcription-toggle-btn');
   if (btn) { btn.textContent = '🎙 Start Transcription'; btn.style.color = 'var(--acid)'; }
+  syncHomeListen(false);
   setStatus('ready');
   addMsg('system', '⏹ Local transcription stopped');
 }
@@ -734,8 +892,21 @@ function addTranscriptLine(line) {
   const scroll = document.getElementById('transcript-scroll');
   const all    = document.getElementById('transcript-all');
   const p      = document.createElement('p');
-  p.className  = 't-line new';
-  p.textContent = line;
+  // Friendly chat bubbles (v3.0): "[You] …" → You, "[Them] …" → Caller.
+  // The raw line is still what gets stored/copied — only the display changes.
+  const you  = line.startsWith('[You]');
+  const them = line.startsWith('[Them]');
+  if (you || them) {
+    p.className = 't-line new ' + (you ? 'you' : 'them');
+    const name = document.createElement('span');
+    name.className = 't-name';
+    name.textContent = you ? 'You' : 'Caller';
+    p.appendChild(name);
+    p.appendChild(document.createTextNode(line.replace(/^\[(You|Them)\]\s*/, '')));
+  } else {
+    p.className  = 't-line new';
+    p.textContent = line;
+  }
   scroll.appendChild(p);
   scroll.scrollTop = scroll.scrollHeight;
   setTimeout(() => p.classList.remove('new'), 800);

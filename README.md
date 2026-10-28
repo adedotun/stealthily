@@ -1,9 +1,10 @@
-# 👻 GhostMind v2.3 — Native Electron App
+# 👻 GhostMind v3.0 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
 **v2.2:** interface themes, and a stealth fix for the Snipe cursor — see [What changed in v2.2](#what-changed-in-v22).
 **v2.3:** zero-trace capture — hidden pointer, keyboard selection, and full-screen capture with no overlay at all — see [What changed in v2.3](#what-changed-in-v23).
+**v3.0:** the friendly redesign — a calmer modern interface and a 2-minute setup wizard, so non-technical people can use it — see [What changed in v3.0](#what-changed-in-v30).
 
 ---
 
@@ -223,6 +224,15 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.0
+
+The friendly redesign — same engine, human face:
+
+- **Setup wizard** — first launch (no AI key yet) opens a 4-step guided setup: welcome → paste your Anthropic key → sound check (pick mic + call audio, with a speak-and-watch-the-bar voice test) → plain-English permissions explainer. Skippable at every step, re-runnable any time from the ⚙ Setup button.
+- **Home bar** — one big friendly **🎧 Start Listening** button (it drives the same local transcription; the Audio tab still exists for power users), plus status pills in plain words — *Microphone · Call audio · AI connected* — with green ticks and a pulsing red dot while listening.
+- **Calmer design** — Inter typeface replaces the monospace/terminal look, corners are rounder (20px cards), shadows softer, quick-action chips are now friendly pills, and the transcript reads like a chat: rounded bubbles labelled **You** and **Caller** instead of `[Them]` log lines.
+- **Plain language** — panel headings and labels rewritten for humans ("Listen to my call · Private — stays on this device"). All five v2.2 themes still apply to everything, wizard included.
 
 ## What changed in v2.3
 
