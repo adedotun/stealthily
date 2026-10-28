@@ -1,4 +1,4 @@
-# 👻 GhostMind v3.2 — Native Electron App
+# 👻 GhostMind v3.3 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
@@ -7,6 +7,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.0:** the friendly redesign — a calmer modern interface and a 2-minute setup wizard, so non-technical people can use it — see [What changed in v3.0](#what-changed-in-v30).
 **v3.1:** effortless + a little magic — Keychain-encrypted API key, faster transcription, live call summary, automatic post-call summary with a follow-up email draft, and the groundwork for one-click installs (bundled engine) and auto-updates — see [What changed in v3.1](#what-changed-in-v31).
 **v3.2:** live-feeling transcription (provisional words appear while someone is still speaking) and a real database memory — see [What changed in v3.2](#what-changed-in-v32).
+**v3.3:** speed — chat answers now stream in token by token, the models' built-in "thinking" pause is off by default, and the default system prompt was rewritten for a glance-and-go copilot — see [What changed in v3.3](#what-changed-in-v33).
 
 ---
 
@@ -127,7 +128,7 @@ The sniper overlay (region selector) uses the **same protection** — so even th
 ## Features
 
 ### 💬 Chat
-Full AI chat with Claude (default model `claude-sonnet-4-5-20250929`, selectable in Settings). Conversation history maintained per session. Markdown rendered including code blocks. The live transcript is injected as context into AI messages automatically.
+Full AI chat with Claude (default model `claude-sonnet-5-5`, selectable in Settings). Answers stream in as they're generated. Conversation history maintained per session. Markdown rendered including code blocks. The live transcript is injected as context into AI messages automatically.
 
 ### 👁 Stealth Snipe (`Cmd+Shift+S`)
 - Press hotkey → drag to select any region of your screen — or don't touch the mouse at all:
@@ -226,6 +227,13 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.3
+
+- **Streaming chat.** Chat answers now arrive token by token (Anthropic SSE → `ai-stream-chunk` events → the answer types itself into the bubble) instead of appearing only after the full response completes. First words show in well under a second. Copilot auto-answers and the summary features still use the non-streaming path.
+- **No more thinking pause.** The current models think adaptively before answering, which delayed every reply. Thinking is now disabled by default; turn on **Deep Thinking** in Settings when you want slower, more thorough answers.
+- **A sharper default prompt.** The system prompt was rewritten for how GhostMind is actually used: lead with the answer, keep it tight and scannable, be specific and actionable, draft say-it-out-loud replies from live transcript context. If your saved prompt is still the untouched old default, it upgrades automatically; a prompt you edited yourself is never touched.
+- **Model currency fixes (from the v3.2 test pass).** Anthropic retired `claude-sonnet-4-5-20250929` (HTTP 404), so defaults moved to `claude-sonnet-5-5` / `claude-haiku-5-5`, retired saved models migrate on launch, a 404 retries once with the current model, the Settings model list offers only current models, and responses are normalized so a thinking block can no longer render as an empty reply.
 
 ## What changed in v3.2
 

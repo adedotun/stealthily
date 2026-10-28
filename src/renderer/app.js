@@ -410,6 +410,9 @@ function applySettings(s) {
   if (pcVal) document.getElementById('t-promptcaching').classList.add('on');
   else document.getElementById('t-promptcaching').classList.remove('on');
 
+  if (s.deepThinking) document.getElementById('t-deepthinking').classList.add('on');
+  else document.getElementById('t-deepthinking').classList.remove('on');
+
   // Device dropdowns are populated async by populateAudioDevices();
   // apply the saved picks once options exist.
   if (s.youDeviceId)  sid('s-you-device').value  = s.youDeviceId;
@@ -439,6 +442,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     proactiveMode: document.getElementById('t-proactive').classList.contains('on'),
     copilotAutoAnswer: document.getElementById('t-copilot').classList.contains('on'),
     promptCaching: document.getElementById('t-promptcaching').classList.contains('on'),
+    deepThinking: document.getElementById('t-deepthinking').classList.contains('on'),
   };
   await window.ghostmind.saveSettings(s);
   state.settings = s;
@@ -548,6 +552,51 @@ window.copyText = (btn) => {
   setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
 };
 
+// ─── STREAMING AI (v3.3) ─────────────────────────────────────────────────────
+// One dispatcher for the app's lifetime; askAI() is serialized by
+// state.isThinking, so a single active stream is all we ever track.
+let activeStream = null;
+window.ghostmind.on('ai-stream-chunk', ({ requestId, text }) => {
+  if (!activeStream || activeStream.requestId !== requestId) return;
+  activeStream.full += text;
+  activeStream.render();
+});
+window.ghostmind.on('ai-stream-done', ({ requestId, text }) => {
+  if (!activeStream || activeStream.requestId !== requestId) return;
+  const s = activeStream; activeStream = null;
+  s.resolve(text || s.full);
+});
+window.ghostmind.on('ai-stream-error', ({ requestId, message }) => {
+  if (!activeStream || activeStream.requestId !== requestId) return;
+  const s = activeStream; activeStream = null;
+  s.reject(new Error(message || 'Stream failed'));
+});
+
+function streamAIRequest(payload, typingEl) {
+  return new Promise((resolve, reject) => {
+    const requestId = 'r' + Date.now() + Math.random().toString(36).slice(2, 8);
+    const bubble = typingEl.querySelector('.bubble');
+    let renderQueued = false;
+    activeStream = {
+      requestId, full: '', resolve, reject,
+      render() {
+        if (renderQueued) return;
+        renderQueued = true;
+        requestAnimationFrame(() => {
+          renderQueued = false;
+          if (bubble && activeStream) bubble.innerHTML = renderMarkdown(activeStream.full);
+          const msgs = document.getElementById('messages');
+          if (msgs) msgs.scrollTop = msgs.scrollHeight;
+        });
+      },
+    };
+    window.ghostmind.sendAIRequestStream({ requestId, ...payload }).catch((e) => {
+      if (activeStream && activeStream.requestId === requestId) activeStream = null;
+      reject(e);
+    });
+  });
+}
+
 // ─── AI ENGINE ────────────────────────────────────────────────────────────────
 async function askAI(userText, imgB64, apiTextOverride) {
   if (!state.settings.apiKey) {
@@ -590,16 +639,16 @@ async function askAI(userText, imgB64, apiTextOverride) {
   const typingEl = addTyping();
 
   try {
-    const data = await window.ghostmind.sendAIRequest({
+    // Streamed (v3.3): the answer types itself into the typing bubble.
+    const text = await streamAIRequest({
       messages: apiMessages,
       model: state.settings.model || 'claude-sonnet-5-5',
-      systemPrompt: state.settings.systemPrompt || 'You are GhostMind, a stealth AI assistant running invisibly. Be sharp, concise, maximally helpful. Analyze screenshots thoroughly.',
+      systemPrompt: state.settings.systemPrompt || 'You are GhostMind, an invisible AI copilot. Lead with the answer, keep it tight and scannable, no preamble.',
       maxTokens: 2048
-    });
+    }, typingEl);
     typingEl.remove();
 
-    const text = data.content?.[0]?.text || '';
-    addMsg('ai', text, null, false, data.usage);
+    addMsg('ai', text, null, false, null);
     // Update state messages correctly
     state.messages[state.messages.length - 1] = { role: 'user', content: userText };
     state.messages.push({ role: 'assistant', content: text });

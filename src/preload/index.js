@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('ghostmind', {
   getSettings:    ()       => ipcRenderer.invoke('get-settings'),
   saveSettings:   (s)      => ipcRenderer.invoke('save-settings', s),
   sendAIRequest:  (data)   => ipcRenderer.invoke('send-ai-request', data),
+  sendAIRequestStream: (data) => ipcRenderer.invoke('send-ai-request-stream', data),
 
   // ── Sessions / Memory ─────────────────────────────────────────────────────
   getSessions:    ()       => ipcRenderer.invoke('get-sessions'),
@@ -46,6 +47,7 @@ contextBridge.exposeInMainWorld('ghostmind', {
       'init', 'clipboard-change', 'screen-snapshot',
       'snipe-captured', 'focus-input', 'permission-needed',
       'external-transcript', 'external-state',
+      'ai-stream-chunk', 'ai-stream-done', 'ai-stream-error',
     ];
     if (allowed.includes(channel)) {
       ipcRenderer.on(channel, (_, data) => fn(data));

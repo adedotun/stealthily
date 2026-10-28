@@ -72,5 +72,5 @@
     "test:local": "node --test tests-local/*.test.js",
     "build:sidecar": "sidecar/.venv/bin/pip install pyinstaller && sidecar/.venv/bin/pyinstaller --noconfirm --distpath sidecar/bin --workpath /tmp/ghostmind-pyi-build sidecar/ghostmind-whisper.spec"
   },
-  "version": "3.2.0"
+  "version": "3.3.0"
 }
