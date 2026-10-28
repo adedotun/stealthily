@@ -68,6 +68,9 @@ window.ghostmind.on('external-transcript', ({ line }) => {
   if (state.transcript.length % 6 === 0 && state.settings.proactiveMode) {
     triggerProactiveInsight();
   }
+  if (state.transcript.length % 12 === 0) {
+    updateLiveSummary();
+  }
 });
 
 // Sidecar state from main: true = Whisper sidecar process is up.
@@ -131,6 +134,80 @@ window.ghostmind.on('focus-input', () => {
   switchTab('chat');
   document.getElementById('chat-input').focus();
 });
+
+// ─── LIVE SUMMARY + POST-CALL MAGIC (v3.1) ───────────────────────────────────
+// A running "so far" line in the transcript bar, refreshed every 12 lines,
+// and — when a call ends — an automatic summary + follow-up email draft.
+let summaryBusy = false;
+async function updateLiveSummary() {
+  if (summaryBusy || !state.settings?.apiKey || state.transcript.length < 6) return;
+  summaryBusy = true;
+  try {
+    const data = await window.ghostmind.sendAIRequest({
+      messages: [{ role: 'user', content: state.transcript.slice(-40).join('\n') }],
+      model: 'claude-haiku-4-5-20251001',
+      systemPrompt: 'Summarize this call transcript so far in ONE friendly sentence (max 25 words) starting with "So far:". Plain words, no preamble.',
+      maxTokens: 90,
+    });
+    const text = data.content?.[0]?.text?.trim();
+    const el = document.getElementById('live-summary');
+    if (text && el) { el.textContent = '🧭 ' + text; el.style.display = 'block'; }
+  } catch (_) {}
+  summaryBusy = false;
+}
+
+let postCallBusy = false;
+async function generatePostCall() {
+  if (postCallBusy || !state.settings?.apiKey || state.transcript.length < 4) return;
+  postCallBusy = true;
+  try {
+    const transcript = state.transcript.slice(-80).join('\n');
+    const data = await window.ghostmind.sendAIRequest({
+      messages: [{ role: 'user', content: transcript }],
+      model: state.settings.model || 'claude-sonnet-4-5-20250929',
+      systemPrompt: 'You are GhostMind. From the call transcript, reply with exactly two sections headed "SUMMARY" and "EMAIL". SUMMARY: 3-5 short bullet lines (decisions, key points, action items with owners). EMAIL: a short, warm follow-up email the user could send (subject line first, then 3-5 sentences, sign off as the user). Plain language. No other text.',
+      maxTokens: 700,
+    });
+    const text = data.content?.[0]?.text?.trim();
+    if (!text) return;
+    const idx = text.indexOf('EMAIL');
+    const summary = (idx >= 0 ? text.slice(0, idx) : text).replace(/^SUMMARY\s*/i, '').trim();
+    const email = idx >= 0 ? text.slice(idx).replace(/^EMAIL\s*/i, '').trim() : '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'msg system';
+    const card = document.createElement('div');
+    card.className = 'postcall-card';
+    const h1 = document.createElement('h4'); h1.textContent = '📋 Call summary';
+    const p1 = document.createElement('div'); p1.textContent = summary;
+    card.appendChild(h1); card.appendChild(p1);
+    if (email) {
+      const h2 = document.createElement('h4'); h2.textContent = '✉️ Follow-up email draft';
+      const p2 = document.createElement('div'); p2.textContent = email;
+      card.appendChild(h2); card.appendChild(p2);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'pc-actions';
+    const mkBtn = (label, getText) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        navigator.clipboard.writeText(getText()).catch(() => {});
+        b.textContent = 'Copied ✓';
+        setTimeout(() => { b.textContent = label; }, 1500);
+      });
+      return b;
+    };
+    actions.appendChild(mkBtn('Copy summary', () => summary));
+    if (email) actions.appendChild(mkBtn('Copy email', () => email));
+    card.appendChild(actions);
+    wrap.appendChild(card);
+    const messages = document.getElementById('messages');
+    messages.appendChild(wrap);
+    messages.scrollTop = messages.scrollHeight;
+  } catch (_) {}
+  postCallBusy = false;
+}
 
 // ─── FRIENDLY HOME BAR + SETUP WIZARD (v3.0) ─────────────────────────────────
 function syncHomeListen(active) {
@@ -843,6 +920,7 @@ async function stopLocalCapture() {
   syncHomeListen(false);
   setStatus('ready');
   addMsg('system', '⏹ Local transcription stopped');
+  generatePostCall();
 }
 
 function drawWaveform(analyser, canvasId) {

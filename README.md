@@ -1,10 +1,11 @@
-# 👻 GhostMind v3.0 — Native Electron App
+# 👻 GhostMind v3.1 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
 **v2.2:** interface themes, and a stealth fix for the Snipe cursor — see [What changed in v2.2](#what-changed-in-v22).
 **v2.3:** zero-trace capture — hidden pointer, keyboard selection, and full-screen capture with no overlay at all — see [What changed in v2.3](#what-changed-in-v23).
 **v3.0:** the friendly redesign — a calmer modern interface and a 2-minute setup wizard, so non-technical people can use it — see [What changed in v3.0](#what-changed-in-v30).
+**v3.1:** effortless + a little magic — Keychain-encrypted API key, faster transcription, live call summary, automatic post-call summary with a follow-up email draft, and the groundwork for one-click installs (bundled engine) and auto-updates — see [What changed in v3.1](#what-changed-in-v31).
 
 ---
 
@@ -224,6 +225,16 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.1
+
+- **Your API key now lives in the Keychain.** Settings are saved with the key encrypted via Electron `safeStorage` (macOS Keychain / Windows DPAPI) as `apiKeyEnc` — the plaintext key no longer sits in `settings.json`. Existing installs migrate automatically on first launch.
+- **Faster transcription.** Segments flush after ~0.55s of silence (was 0.8s) and long monologues surface every ~8s (was 15s), so words appear noticeably sooner.
+- **Live summary.** While listening, a 🧭 "So far: …" line in the transcript bar quietly refreshes as the call develops.
+- **Post-call magic.** When you stop listening after a real conversation, GhostMind automatically writes a **call summary** (decisions, action items) and a **follow-up email draft**, each with a one-tap Copy button.
+- **One-click install groundwork.** `npm run build:sidecar` (PyInstaller spec in `sidecar/ghostmind-whisper.spec`) produces a standalone `ghostmind-whisper` engine in `sidecar/bin/`; the app prefers it automatically when present, so packaged installs need **no Python**. Build order for a fully bundled DMG: `npm run setup:sidecar` → `npm run build:sidecar` → `npm run build:mac`.
+- **Auto-update.** Packaged builds check this repo's GitHub Releases once at launch (electron-updater, `build.publish` in package.json) and offer updates through the standard dialog. Dev builds are unaffected.
+- Note: `npm install` is needed once after upgrading, for the new `electron-updater` dependency.
 
 ## What changed in v3.0
 

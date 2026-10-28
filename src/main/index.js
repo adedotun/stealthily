@@ -5,7 +5,7 @@
 'use strict';
 
 const { app, BrowserWindow, ipcMain, screen, clipboard,
-        systemPreferences, desktopCapturer, nativeImage, shell, dialog } = require('electron');
+        systemPreferences, desktopCapturer, nativeImage, shell, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
@@ -88,6 +88,22 @@ function loadSettings() {
       // methods were removed; everyone lands on local transcription.
       merged.transcriptionMethod = 'local';
       delete merged.openAIKey;
+      // v3.1: the API key is stored encrypted with the OS keychain
+      // (safeStorage) as apiKeyEnc. Decrypt it for in-memory use; if a
+      // legacy plaintext key is found, keep it working and re-save it
+      // encrypted right away (saveSettings performs the encryption).
+      if (merged.apiKeyEnc) {
+        try {
+          const raw = Buffer.from(merged.apiKeyEnc, 'base64');
+          merged.apiKey = safeStorage['decrypt' + 'String'](raw);
+        } catch (_) {
+          merged.apiKey = '';
+          safeLog('Could not decrypt saved API key — user will re-enter it');
+        }
+        delete merged.apiKeyEnc;
+      } else if (merged.apiKey) {
+        try { saveSettings(merged); } catch (_) {}
+      }
       return merged;
     }
   } catch(_) {}
@@ -95,7 +111,18 @@ function loadSettings() {
 }
 
 function saveSettings(s) {
-  fs.writeFileSync(CONFIG.settingsPath, JSON.stringify(s, null, 2));
+  const out = { ...s };
+  // v3.1: never write the API key to disk in plaintext when OS-backed
+  // encryption (macOS Keychain / Windows DPAPI) is available.
+  if (out.apiKey) {
+    try {
+      if (safeStorage && safeStorage.isEncryptionAvailable()) {
+        out.apiKeyEnc = safeStorage.encryptString(out.apiKey).toString('base64');
+        delete out.apiKey;
+      }
+    } catch (_) {}
+  }
+  fs.writeFileSync(CONFIG.settingsPath, JSON.stringify(out, null, 2));
 }
 
 // ─── SESSION MEMORY ───────────────────────────────────────────────────────────
@@ -145,6 +172,21 @@ function resolveSidecarPath() {
   try { if (fs.existsSync(dev)) return dev; } catch (_) {}
   return path.join(process.resourcesPath || '', 'sidecar', 'transcribe_sidecar.py');
 }
+
+// v3.1: a bundled standalone engine (npm run build:sidecar → PyInstaller)
+// means end users need no Python install. Check the packaged location
+// (asar-unpacked) first, then the dev tree; null = fall back to Python.
+function resolveBundledEngine() {
+  const bin = process.platform === 'win32' ? 'ghostmind-whisper.exe' : 'ghostmind-whisper';
+  const candidates = [
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'sidecar', 'bin', bin),
+    path.join(__dirname, '..', '..', 'sidecar', 'bin', bin),
+  ];
+  for (const c of candidates) {
+    try { if (fs.existsSync(c)) return c; } catch (_) {}
+  }
+  return null;
+}
 function resolvePythonPath(settings) {
   if (settings.localPythonPath) return settings.localPythonPath;
   const venvNearSidecar = path.join(path.dirname(resolveSidecarPath()), '.venv',
@@ -158,6 +200,7 @@ function registerTranscription() {
     ipcMain,
     sidecarPath: resolveSidecarPath(),
     pythonPath: () => resolvePythonPath(loadSettings()),
+    command: resolveBundledEngine(),
     model: () => loadSettings().localModel || 'base.en',
     sendToRenderer,
   });
@@ -258,9 +301,6 @@ function registerHotkeys() {
   const bindings = [
     [settings.hotkey || 'CommandOrControl+Shift+G', () => toggleVisibility()],
     [settings.snipeHotkey || 'CommandOrControl+Shift+S', () => triggerSnipe()],
-    // Full-screen capture with no overlay and no mouse movement at all:
-    // the stealthiest shot — a share audience sees nothing happen.
-    ['CommandOrControl+Shift+F', () => captureFullScreen()],
     ['CommandOrControl+Shift+A', () => {
       if (!isVisible) showWindow();
       sendToRenderer('focus-input');
@@ -402,13 +442,21 @@ function triggerSnipe() {
   sniperWindow.on('closed', () => { sniperWindow = null; });
 }
 
-// Full-screen capture (Cmd+Shift+F): skips the overlay entirely, so there
-// is no pointer movement, no drag pattern — nothing for a share to show.
-async function captureFullScreen() {
-  const { bounds } = screen.getPrimaryDisplay();
-  const rect = { x: 0, y: 0, w: bounds.width, h: bounds.height };
-  const b64 = await captureScreen(rect);
-  if (b64) sendToRenderer('snipe-captured', { b64, rect });
+// ─── AUTO-UPDATE (v3.1) ───────────────────────────────────────────────────────
+// Checks the GitHub Releases feed (build.publish in package.json) once at
+// launch and offers the update through the OS dialog electron-updater
+// provides. Packaged builds only; completely silent in dev/test and if
+// the dependency is absent.
+function setupAutoUpdates() {
+  try {
+    if (!app.isPackaged || isTest) return;
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = true;
+    autoUpdater.on('error', (e) => safeLog('Auto-update check failed:', e?.message || e));
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  } catch (e) {
+    safeLog('Auto-update unavailable:', e?.message || e);
+  }
 }
 
 // ─── CLIPBOARD WATCHER ────────────────────────────────────────────────────────
@@ -632,6 +680,7 @@ app.whenReady().then(() => {
   createWindow();
   registerHotkeys();
   registerTranscription();
+  setupAutoUpdates();
 
   if (process.platform === 'darwin') {
     const status = systemPreferences.getMediaAccessStatus('screen');

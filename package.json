@@ -1,6 +1,16 @@
 {
   "build": {
     "appId": "com.ghostmind.app",
+    "asarUnpack": [
+      "sidecar/bin/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "adedotun",
+        "repo": "stealthily"
+      }
+    ],
     "extraResources": [
       {
         "filter": [
@@ -15,6 +25,7 @@
       "src/**/*",
       "sidecar/transcribe_sidecar.py",
       "sidecar/requirements.txt",
+      "sidecar/bin/**/*",
       "package.json"
     ],
     "mac": {
@@ -39,7 +50,9 @@
       ]
     }
   },
-  "dependencies": {},
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
   "description": "Stealth AI assistant — invisible to all screen capture, with on-device call transcription",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
@@ -50,6 +63,7 @@
   "name": "ghostmind",
   "scripts": {
     "build:all": "electron-builder --mac --win",
+    "build:sidecar": "sidecar/.venv/bin/pip install pyinstaller && sidecar/.venv/bin/pyinstaller --noconfirm --distpath sidecar/bin --workpath /tmp/ghostmind-pyi-build sidecar/ghostmind-whisper.spec",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "dev": "electron . --dev",
@@ -58,5 +72,5 @@
     "test": "playwright test",
     "test:local": "node --test tests-local/*.test.js"
   },
-  "version": "3.0.0"
+  "version": "3.1.0"
 }

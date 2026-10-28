@@ -980,6 +980,22 @@ body, input, textarea, button, a, select, canvas, span, div {
 #wiz-level { height: 10px; background: var(--bg4); border-radius: 999px; overflow: hidden; margin-top: 10px; }
 #wiz-level-fill { height: 100%; width: 0%; background: var(--acid); border-radius: 999px; transition: width 0.08s linear; }
 .wiz-note { font-size: 12px; color: var(--text-dim); line-height: 1.55; background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 12px; }
+
+/* Post-call card (v3.1) */
+.postcall-card {
+  background: var(--bg2); border: 1px solid var(--line2);
+  border-radius: 14px; padding: 14px; margin: 10px 0;
+  font-size: 12.5px; line-height: 1.55; white-space: pre-wrap;
+}
+.postcall-card h4 { font-size: 12px; letter-spacing: 0.4px; margin: 10px 0 4px; color: var(--acid); }
+.postcall-card h4:first-child { margin-top: 0; }
+.postcall-card .pc-actions { display: flex; gap: 8px; margin-top: 12px; }
+.postcall-card .pc-actions button {
+  border: 1px solid var(--line2); background: var(--bg4); color: var(--text);
+  border-radius: 999px; padding: 6px 14px; font-family: var(--font-ui);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.postcall-card .pc-actions button:hover { border-color: var(--acid); color: var(--acid); }
 </style>
 </head>
 <body>
@@ -1004,7 +1020,7 @@ body, input, textarea, button, a, select, canvas, span, div {
           </svg>
         </div>
         <span id="logo-name">GhostMind</span>
-        <span id="logo-version">v3.0</span>
+        <span id="logo-version">v3.1</span>
       </div>
     </div>
     <div id="titlebar-right">
@@ -1067,6 +1083,7 @@ body, input, textarea, button, a, select, canvas, span, div {
       <span>LIVE TRANSCRIPT</span>
       <button style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:11px;" id="transcript-toggle-btn">HIDE</button>
     </div>
+    <div id="live-summary" style="display:none; padding:7px 12px; font-size:12px; line-height:1.5; color:var(--text); background:var(--acid-dim); border-bottom:1px solid var(--line);"></div>
     <div id="transcript-scroll"></div>
   </div>
 

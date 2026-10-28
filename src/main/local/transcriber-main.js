@@ -12,9 +12,13 @@ const path = require('path');
 const readline = require('readline');
 
 class LocalTranscriber {
-  // opts: { sidecarPath, pythonPath, model, sendToRenderer }
+  // opts: { sidecarPath, pythonPath, model, sendToRenderer, command }
+  // `command` (v3.1): path to a bundled standalone engine binary
+  // (PyInstaller build of the sidecar). When set, it is spawned directly
+  // with no Python involved; otherwise pythonPath runs sidecarPath.
   constructor(opts) {
     this.sidecarPath = opts.sidecarPath;              // .../sidecar/transcribe_sidecar.py
+    this.command = opts.command || null;
     this.pythonPath = opts.pythonPath || 'python3';
     this.model = opts.model || 'base.en';
     this.sendToRenderer = opts.sendToRenderer;        // (channel, data) => void
@@ -32,7 +36,9 @@ class LocalTranscriber {
     const model = (typeof this.model === 'function' ? this.model() : this.model) || 'base.en';
     const pythonPath = (typeof this.pythonPath === 'function' ? this.pythonPath() : this.pythonPath) || 'python3';
     const env = { ...process.env, GHOSTMIND_WHISPER_MODEL: model };
-    this.proc = spawn(pythonPath, [this.sidecarPath], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    this.proc = this.command
+      ? spawn(this.command, [], { env, stdio: ['pipe', 'pipe', 'pipe'] })
+      : spawn(pythonPath, [this.sidecarPath], { env, stdio: ['pipe', 'pipe', 'pipe'] });
     const rl = readline.createInterface({ input: this.proc.stdout });
     rl.on('line', (line) => {
       let msg; try { msg = JSON.parse(line); } catch { return; }
@@ -74,8 +80,8 @@ class LocalTranscriber {
 
 // IPC wiring — call once from your existing ipcMain setup:
 //   const transcriber = registerLocalTranscription({ ipcMain, sidecarPath, sendToRenderer });
-function registerLocalTranscription({ ipcMain, sidecarPath, pythonPath, model, sendToRenderer }) {
-  const transcriber = new LocalTranscriber({ sidecarPath, pythonPath, model, sendToRenderer });
+function registerLocalTranscription({ ipcMain, sidecarPath, pythonPath, model, sendToRenderer, command }) {
+  const transcriber = new LocalTranscriber({ sidecarPath, pythonPath, model, sendToRenderer, command });
   ipcMain.handle('local-transcription-start', () => { transcriber.start(); return { ok: true }; });
   ipcMain.handle('local-transcription-stop',  () => { transcriber.stop();  return { ok: true }; });
   ipcMain.handle('transcribe-local-segment', (_e, { wavBase64, speaker, startMs }) =>

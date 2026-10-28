@@ -16,9 +16,9 @@ class Segmenter {
   constructor(opts = {}) {
     this.sampleRate   = opts.sampleRate   || 16000;
     this.frameMs      = opts.frameMs      || 100;
-    this.silenceMs    = opts.silenceMs    ?? 800;
+    this.silenceMs    = opts.silenceMs    ?? 550;   // v3.1: quicker flush = lower latency
     this.minSpeechMs  = opts.minSpeechMs  ?? 1200;
-    this.maxSegmentMs = opts.maxSegmentMs ?? 15000;
+    this.maxSegmentMs = opts.maxSegmentMs ?? 8000; // v3.1: was 15000 — long monologues now surface in ~8s chunks
     this.threshold    = opts.threshold    ?? 0.015; // RMS energy
     this.onSegment    = opts.onSegment    || (() => {});
     this.speaker      = opts.speaker      || 'them';
