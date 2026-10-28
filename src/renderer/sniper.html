@@ -7,12 +7,15 @@
   html, body {
     width: 100vw; height: 100vh;
     background: rgba(0,0,0,0.35);
-    /* STEALTH: never 'crosshair' here. The OS cursor is drawn by the OS,
-       not inside this capture-protected window, and screen-share tools
-       include it — a '+' cursor tells everyone a tool is active.
-       The in-window guide lines below give the same precision while the
-       pointer keeps its ordinary arrow shape. */
-    cursor: default;
+    /* STEALTH: the OS pointer is drawn by the OS, not inside this
+       capture-protected window, and screen-share tools include it.
+       'crosshair' would show a suspicious '+', and even a moving arrow
+       traces your selection for the audience. So the pointer is hidden
+       entirely while sniping — viewers see a still screen. You still
+       aim precisely with the in-window guide lines and selection box,
+       which only you can see. For zero mouse movement at all, use the
+       keyboard selection below (arrows / Alt+arrows / Enter). */
+    cursor: none;
     user-select: none;
     overflow: hidden;
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
@@ -94,7 +97,7 @@
   <div id="instructions">
     <div>GHOSTMIND SNIPER</div>
     <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;">
-      Drag to select region &nbsp;·&nbsp; <span class="key">ESC</span> to cancel
+      Drag to select &nbsp;·&nbsp; or <span class="key">←→↑↓</span> move box &nbsp;·&nbsp; <span class="key">Alt</span>+arrows resize &nbsp;·&nbsp; <span class="key">Enter</span> capture &nbsp;·&nbsp; <span class="key">ESC</span> cancel
     </div>
   </div>
   <div id="selection"></div>
@@ -166,9 +169,70 @@
     await window.ghostmind.snipeResult({ x, y, w, h });
   });
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') window.ghostmind.snipeCancel();
+  // ── Keyboard selection (v2.3): the mouse never has to move ──────────────
+  // A selection box starts centred. Arrow keys move it (Shift = 1px fine
+  // steps), Alt+arrows resize it, Enter captures it. Because the pointer
+  // is hidden (cursor: none) and this box lives inside the protected
+  // overlay, a screen-share audience sees literally nothing happen.
+  const kb = { active: false, x: 0, y: 0, w: 0, h: 0 };
+
+  function kbShow() {
+    if (!kb.active) {
+      kb.w = Math.round(window.innerWidth * 0.6);
+      kb.h = Math.round(window.innerHeight * 0.6);
+      kb.x = Math.round((window.innerWidth - kb.w) / 2);
+      kb.y = Math.round((window.innerHeight - kb.h) / 2);
+      kb.active = true;
+      instructions.style.display = 'none';
+    }
+    selEl.style.left   = kb.x + 'px';
+    selEl.style.top    = kb.y + 'px';
+    selEl.style.width  = kb.w + 'px';
+    selEl.style.height = kb.h + 'px';
+    selEl.style.display = 'block';
+    const labelX = Math.min(kb.x, window.innerWidth - 120);
+    const labelY = Math.max(kb.y - 24, 4);
+    dimsEl.style.left    = labelX + 'px';
+    dimsEl.style.top     = labelY + 'px';
+    dimsEl.style.display = 'block';
+    dimsEl.textContent   = `${kb.w} × ${kb.h}`;
+    crossH.style.top  = (kb.y + kb.h / 2) + 'px';
+    crossV.style.left = (kb.x + kb.w / 2) + 'px';
+  }
+
+  function kbClamp() {
+    kb.w = Math.max(20, Math.min(kb.w, window.innerWidth));
+    kb.h = Math.max(20, Math.min(kb.h, window.innerHeight));
+    kb.x = Math.max(0, Math.min(kb.x, window.innerWidth - kb.w));
+    kb.y = Math.max(0, Math.min(kb.y, window.innerHeight - kb.h));
+  }
+
+  document.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape') { window.ghostmind.snipeCancel(); return; }
+
+    if (e.key === 'Enter' && kb.active) {
+      selEl.style.background = 'rgba(0,255,136,0.08)';
+      await new Promise(r => setTimeout(r, 120));
+      await window.ghostmind.snipeResult({ x: kb.x, y: kb.y, w: kb.w, h: kb.h });
+      return;
+    }
+
+    const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const d = arrows[e.key];
+    if (!d) return;
+    e.preventDefault();
+    kbShow();
+    const step = e.shiftKey ? 1 : 10;
+    if (e.altKey) { kb.w += d[0] * step; kb.h += d[1] * step; }
+    else         { kb.x += d[0] * step; kb.y += d[1] * step; }
+    kbClamp();
+    kbShow();
   });
+
+  // A mouse drag takes over from keyboard mode
+  document.addEventListener('mousedown', () => {
+    if (kb.active) { kb.active = false; selEl.style.background = ''; }
+  }, true);
 </script>
 </body>
 </html>

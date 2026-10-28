@@ -1,8 +1,9 @@
-# 👻 GhostMind v2.2 — Native Electron App
+# 👻 GhostMind v2.3 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
 **v2.2:** interface themes, and a stealth fix for the Snipe cursor — see [What changed in v2.2](#what-changed-in-v22).
+**v2.3:** zero-trace capture — hidden pointer, keyboard selection, and full-screen capture with no overlay at all — see [What changed in v2.3](#what-changed-in-v23).
 
 ---
 
@@ -126,8 +127,10 @@ The sniper overlay (region selector) uses the **same protection** — so even th
 Full AI chat with Claude (default model `claude-sonnet-4-5-20250929`, selectable in Settings). Conversation history maintained per session. Markdown rendered including code blocks. The live transcript is injected as context into AI messages automatically.
 
 ### 👁 Stealth Snipe (`Cmd+Shift+S`)
-- Press hotkey → drag to select any region of your screen
-- Your pointer stays an **ordinary arrow** the whole time (see v2.2 notes — the old crosshair cursor was visible to share viewers); the precision guide lines and selection box live inside the capture-protected overlay, so only you see them
+- Press hotkey → drag to select any region of your screen — or don't touch the mouse at all:
+  - **Keyboard selection:** arrow keys move a selection box, `Alt`+arrows resize it, `Shift` gives 1px fine steps, `Enter` captures
+  - **Full-screen capture:** `Cmd+Shift+F` grabs the whole screen with no overlay at all
+- Your pointer is **hidden** for the whole snipe (v2.3), and the guide lines and selection box live inside the capture-protected overlay — a screen-share audience sees a still screen and no pointer: nothing moves, nothing appears
 - GhostMind captures it, no picker dialog, no yellow border
 - One-click: **Solve** / **Explain** / **Extract text** / **Debug** or a custom question
 - The screenshot goes to Claude with vision
@@ -220,6 +223,10 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v2.3
+
+- **Zero-trace Snipe.** The v2.2 fix kept a normal arrow, but a moving arrow still traces your drag for the audience. Now: (1) the pointer is **hidden entirely** while the sniper overlay is up (`cursor: none`) — you aim with the in-window guide lines only you can see; (2) a **keyboard selection mode** — a centred box you move with arrow keys, resize with `Alt`+arrows, fine-tune with `Shift`, and capture with `Enter` — so the mouse never needs to move; (3) **`Cmd+Shift+F` full-screen capture** skips the overlay completely. Even a mouse drag is now invisible: the pointer is hidden for the duration, so the audience just sees a still screen — indistinguishable from you pausing to read.
 
 ## What changed in v2.2
 
