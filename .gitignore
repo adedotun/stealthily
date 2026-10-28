@@ -1,6 +1,9 @@
 node_modules/
 dist/
-test-results/
+sidecar/.venv/
+__pycache__/
+*.pyc
+.env
+*.log
 .DS_Store
-package-lock.json.log
-playwright-report/
+backup-v2-2026-10-27/

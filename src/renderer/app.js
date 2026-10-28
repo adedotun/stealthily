@@ -11,13 +11,12 @@ const state = {
   sessions:      [],          // past session summaries
   isThinking:    false,
   snipeImage:    null,        // base64 PNG from sniper
-  audioStream:   null,
   audioContext:  null,
-  recognition:   null,
-  mediaRecorder:  null,
-  recordingInterval: null,
   isCapturing:   false,
   isMicRecording: false,
+  localCapture:  null,        // LocalCapture instance while running
+  callCaptureWanted: false,   // Audio-panel toggle state
+  dictationMode: false,       // mic button reroutes [You] lines to chat input
   proactiveTimer: null,
   lastScreenB64:  null,
   screenAnalysisInFlight: false,
@@ -33,23 +32,26 @@ function handleInit({ settings, sessions, permissions }) {
   setStatus(state.settings.apiKey ? 'ready' : 'offline');
   showStartupHints(state.settings, permissions);
   refreshPermissionStatus(permissions);
-  loadAudioSources();
+  populateAudioDevices();
 }
 
 window.ghostmind.on('init', handleInit);
 
 window.ghostmind.on('external-transcript', ({ line }) => {
   if (!line) return;
-  
-  if (state.isMicRecording && state.settings.transcriptionMethod === 'chrome') {
-    chatInput.value = (chatInput.value ? chatInput.value + ' ' : '') + line;
+
+  // Dictation mode (mic button): your own lines go to the chat input
+  // instead of the call transcript, and auto-send when you stop.
+  if (state.dictationMode && line.startsWith('[You]')) {
+    const text = line.replace(/^\[You\]\s*/, '');
+    chatInput.value = (chatInput.value ? chatInput.value + ' ' : '') + text;
     chatInput.style.height = 'auto';
     chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
     return;
   }
 
   document.getElementById('capture-bar').classList.add('visible');
-  document.getElementById('capture-label').textContent = 'CAPTURING · CHROME HELPER';
+  document.getElementById('capture-label').textContent = 'CAPTURING · LOCAL WHISPER';
   document.getElementById('audio-badge').classList.add('visible');
   document.getElementById('transcript-bar').classList.add('visible');
   setStatus('listening');
@@ -57,52 +59,20 @@ window.ghostmind.on('external-transcript', ({ line }) => {
   state.isCapturing = true;
   state.transcript.push(line);
   addTranscriptLine(line);
-  
   processTranscriptLine(line);
-  
+
   if (state.transcript.length % 6 === 0 && state.settings.proactiveMode) {
     triggerProactiveInsight();
   }
 });
 
+// Sidecar state from main: true = Whisper sidecar process is up.
+// Capture start/stop itself is driven from this renderer.
 window.ghostmind.on('external-state', ({ active }) => {
-  const btn = document.getElementById('chrome-helper-toggle-btn');
-  if (btn) {
-    if (active) {
-      btn.textContent = '⏹ Stop Dictation';
-      btn.style.color = 'var(--amber)';
-    } else {
-      btn.textContent = '🎙 Start Dictation';
-      btn.style.color = 'var(--acid)';
-    }
-  }
-
-  if (state.settings.transcriptionMethod === 'chrome') {
-    state.isCapturing = active;
-    const badge = document.getElementById('audio-badge');
-    if (active) {
-      document.getElementById('capture-bar').classList.add('visible');
-      document.getElementById('capture-label').textContent = 'CAPTURING · CHROME HELPER';
-      if (badge) badge.classList.add('visible', 'recording');
-      document.getElementById('transcript-bar').classList.add('visible');
-      setStatus('listening');
-    } else {
-      document.getElementById('capture-bar').classList.remove('visible');
-      document.getElementById('transcript-bar').classList.remove('visible');
-      if (badge) badge.classList.remove('visible', 'recording');
-      setStatus('ready');
-      
-      // Auto-submit if we were dictating into chat input and Chrome Helper stopped
-      if (state.isMicRecording) {
-        state.isMicRecording = false;
-        micBtn.classList.remove('recording');
-        const val = chatInput.value.trim();
-        if (val) {
-          chatInput.value = '';
-          send();
-        }
-      }
-    }
+  const btn = document.getElementById('local-transcription-toggle-btn');
+  if (btn && state.callCaptureWanted) {
+    btn.textContent = active ? '⏹ Stop Transcription' : '🎙 Start Transcription';
+    btn.style.color = active ? 'var(--amber)' : 'var(--acid)';
   }
 });
 
@@ -161,8 +131,7 @@ window.ghostmind.on('focus-input', () => {
 function applySettings(s) {
   const sid = v => document.getElementById(v);
   sid('s-apikey').value    = s.apiKey    || '';
-  sid('s-openaikey').value = s.openAIKey || '';
-  sid('s-transcribemethod').value = s.transcriptionMethod || 'chrome';
+  sid('s-localmodel').value = s.localModel || 'base.en';
   sid('s-model').value     = s.model     || 'claude-sonnet-4-5-20250929';
   sid('s-system').value    = s.systemPrompt || '';
   sid('s-hotkey').value    = s.hotkey    || 'CommandOrControl+Shift+G';
@@ -179,27 +148,20 @@ function applySettings(s) {
   if (pcVal) document.getElementById('t-promptcaching').classList.add('on');
   else document.getElementById('t-promptcaching').classList.remove('on');
 
-  // Dynamically update Audio Panel based on transcription method
-  const transcriptionMethod = s.transcriptionMethod || 'chrome';
-  const nativeEl = document.getElementById('native-audio-sources');
-  const chromeEl = document.getElementById('chrome-helper-info');
-  if (nativeEl && chromeEl) {
-    if (transcriptionMethod === 'chrome') {
-      nativeEl.style.display = 'none';
-      chromeEl.style.display = 'flex';
-    } else {
-      nativeEl.style.display = 'block';
-      chromeEl.style.display = 'none';
-    }
-  }
+  // Device dropdowns are populated async by populateAudioDevices();
+  // apply the saved picks once options exist.
+  if (s.youDeviceId)  sid('s-you-device').value  = s.youDeviceId;
+  if (s.themDeviceId) sid('s-them-device').value = s.themDeviceId;
 }
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
   const s = {
     ...state.settings,
     apiKey:        document.getElementById('s-apikey').value.trim(),
-    openAIKey:     document.getElementById('s-openaikey').value.trim(),
-    transcriptionMethod: document.getElementById('s-transcribemethod').value,
+    transcriptionMethod: 'local',
+    localModel:    document.getElementById('s-localmodel').value,
+    youDeviceId:   document.getElementById('s-you-device').value,
+    themDeviceId:  document.getElementById('s-them-device').value,
     model:         document.getElementById('s-model').value,
     systemPrompt:  document.getElementById('s-system').value.trim(),
     hotkey:        document.getElementById('s-hotkey').value.trim(),
@@ -584,177 +546,132 @@ document.getElementById('snipe-thumb').addEventListener('click', () => {
   win.document.write(`<body style="margin:0;background:#000"><img src="${src}" style="max-width:100%;max-height:100vh;display:block;margin:auto;"></body>`);
 });
 
-// ─── MIC VOICE INPUT ──────────────────────────────────────────────────────────
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+// ─── MIC DICTATION (chat input, via the local pipeline) ─────────────────────
+// The mic button turns on dictationMode and makes sure local capture is
+// running. [You] transcript lines are rerouted to the chat input by the
+// external-transcript handler above; stopping auto-sends, as before.
 const micBtn = document.getElementById('mic-btn');
 
-micBtn.addEventListener('click', () => {
-  if (state.settings.transcriptionMethod === 'chrome') {
-    if (state.isMicRecording) {
-      window.ghostmind.sendControl('stop');
-      state.isMicRecording = false;
-      micBtn.classList.remove('recording');
-      setStatus('ready');
-      const val = chatInput.value.trim();
-      if (val) {
-        chatInput.value = '';
-        send();
-      }
-    } else {
-      chatInput.value = '';
-      state.isMicRecording = true;
-      micBtn.classList.add('recording');
-      setStatus('listening');
-      window.ghostmind.sendControl('start');
-    }
-  } else {
-    if (state.isMicRecording) stopMic();
-    else startMic();
-  }
-});
-
-function startMic() {
-  if (!SR) { addMsg('system', '⚠ Speech recognition not available in this browser'); return; }
-  state.recognition = new SR();
-  state.recognition.continuous = false;
-  state.recognition.interimResults = true;
-  state.recognition.lang = 'en-US';
-
-  state.recognition.onresult = (e) => {
-    const text = Array.from(e.results).map(r => r[0].transcript).join('');
-    chatInput.value = text;
-    chatInput.style.height = 'auto';
-    chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
-  };
-  state.recognition.onend = () => {
+micBtn.addEventListener('click', async () => {
+  if (state.isMicRecording) {
     state.isMicRecording = false;
+    state.dictationMode = false;
     micBtn.classList.remove('recording');
+    setStatus('ready');
+    if (!state.callCaptureWanted) await stopLocalCapture();
     const val = chatInput.value.trim();
     if (val) { chatInput.value = ''; send(); }
-  };
-  state.recognition.onerror = () => {
-    state.isMicRecording = false;
-    micBtn.classList.remove('recording');
-  };
-
-  state.recognition.start();
-  state.isMicRecording = true;
-  micBtn.classList.add('recording');
-  setStatus('listening');
-}
-
-function stopMic() {
-  if (state.recognition) { state.recognition.stop(); state.recognition = null; }
-  state.isMicRecording = false;
-  micBtn.classList.remove('recording');
-  setStatus('ready');
-}
-
-// ─── AUDIO CAPTURE (tab / system / mic stream) ────────────────────────────────
-async function loadAudioSources() {
-  try {
-    const sources = await window.ghostmind.getAudioSources();
-    const container = document.getElementById('desktop-sources');
-    container.innerHTML = '';
-    if (!sources.length) {
-      container.innerHTML = '<div class="empty-state" style="padding:12px;font-size:11px;">NO DESKTOP SOURCES — grant Screen Recording permission and restart</div>';
-      return;
-    }
-    sources.slice(0, 6).forEach(src => {
-      const el = document.createElement('div');
-      el.className = 'source-item';
-      el.innerHTML = `
-        <div class="source-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        </div>
-        <div>
-          <div class="source-name">${escHtml(src.name)}</div>
-          <div class="source-type">WINDOW / SCREEN</div>
-        </div>`;
-      el.addEventListener('click', () => startDesktopAudio(src.id, src.name, el));
-      container.appendChild(el);
-    });
-  } catch(e) {
-    console.log('Could not load audio sources:', e);
+  } else {
+    chatInput.value = '';
+    state.dictationMode = true;
+    state.isMicRecording = true;
+    micBtn.classList.add('recording');
+    setStatus('listening');
+    await ensureLocalCapture();
   }
-}
-
-document.getElementById('src-mic').addEventListener('click', async () => {
-  await startMicStream();
 });
 
-async function startMicStream() {
+// ─── LOCAL AUDIO CAPTURE (dual-track, on-device Whisper) ────────────────────
+// Track "you"  = your microphone (exact deviceId from Settings)
+// Track "them" = BlackHole / Loopback device carrying the call
+// Devices are enumerated here — Electron can pick an exact device,
+// which is the whole reason the Chrome Helper could be deleted.
+async function populateAudioDevices() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    initAudioCapture(stream, 'Microphone');
-    document.getElementById('src-mic').classList.add('active');
-  } catch(e) {
-    addMsg('system', `✗ Mic access denied: ${e.message}`);
-  }
-}
-
-async function startDesktopAudio(sourceId, name, el) {
-  try {
-    // Use desktopCapturer source ID with getUserMedia
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: sourceId,
-        }
-      },
-      video: {
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: sourceId,
-          minWidth: 1, maxWidth: 1,
-          minHeight: 1, maxHeight: 1,
-        }
+    // A throwaway getUserMedia call unlocks device labels.
+    try {
+      const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+      tmp.getTracks().forEach(t => t.stop());
+    } catch (_) {}
+    const inputs = await LocalCapture.listAudioInputs();
+    const fill = (selectId, savedId, prefer) => {
+      const sel = document.getElementById(selectId);
+      if (!sel) return;
+      const current = savedId || sel.value;
+      sel.innerHTML = '<option value="">— not set —</option>';
+      inputs.forEach(d => {
+        const o = document.createElement('option');
+        o.value = d.deviceId;
+        o.textContent = d.label || d.deviceId;
+        sel.appendChild(o);
+      });
+      if (current && inputs.some(d => d.deviceId === current)) sel.value = current;
+      else if (prefer) {
+        const hit = inputs.find(prefer);
+        if (hit) sel.value = hit.deviceId;
       }
-    });
-    // Drop video track — we only want audio
-    stream.getVideoTracks().forEach(t => t.stop());
-    const audioStream = new MediaStream(stream.getAudioTracks());
-    initAudioCapture(audioStream, name);
-    document.querySelectorAll('.source-item').forEach(s => s.classList.remove('active'));
-    el.classList.add('active');
-  } catch(e) {
-    addMsg('system', `✗ Could not capture "${name}": ${e.message}`);
+    };
+    const isCall = d => /blackhole|loopback/i.test(d.label || '');
+    fill('s-them-device', state.settings.themDeviceId, isCall);
+    fill('s-you-device', state.settings.youDeviceId, d => !isCall(d));
+    // Persist the auto-picks so main/renderer agree on first run.
+    const youSel = document.getElementById('s-you-device');
+    const themSel = document.getElementById('s-them-device');
+    if (youSel && !state.settings.youDeviceId)  state.settings.youDeviceId  = youSel.value;
+    if (themSel && !state.settings.themDeviceId) state.settings.themDeviceId = themSel.value;
+  } catch (e) {
+    console.log('Could not enumerate audio devices:', e);
   }
 }
 
-function initAudioCapture(stream, label) {
-  // Stop previous
-  if (state.audioStream) stopAudioCapture();
+async function ensureLocalCapture() {
+  if (state.localCapture) return true;
+  const youDeviceId  = state.settings.youDeviceId  || document.getElementById('s-you-device')?.value || '';
+  const themDeviceId = state.settings.themDeviceId || document.getElementById('s-them-device')?.value || '';
+  if (!youDeviceId && !themDeviceId) {
+    addMsg('system', '⚠ No audio devices selected — pick your mic and your BlackHole/Loopback device in Settings first.');
+    return false;
+  }
+  try {
+    await window.ghostmind.startLocalTranscription();
+    const capture = new LocalCapture({
+      sendSegment: (seg) => window.ghostmind.transcribeLocalSegment(seg),
+      onStream: (stream, speaker) => {
+        if (speaker !== 'them') return;
+        try {
+          if (!state.audioContext) state.audioContext = new AudioContext();
+          const src = state.audioContext.createMediaStreamSource(stream);
+          const analyser = state.audioContext.createAnalyser();
+          analyser.fftSize = 512;
+          src.connect(analyser);
+          drawWaveform(analyser, 'waveform-canvas');
+          drawWaveform(analyser, 'waveform-big');
+        } catch (_) {}
+      },
+    });
+    await capture.start({ youDeviceId, themDeviceId });
+    state.localCapture = capture;
+    state.isCapturing = true;
+    document.getElementById('capture-bar').classList.add('visible');
+    document.getElementById('capture-label').textContent = 'CAPTURING · LOCAL WHISPER';
+    const badge = document.getElementById('audio-badge');
+    if (badge) badge.classList.add('visible', 'recording');
+    document.getElementById('audio-waveform-big').style.display = 'block';
+    document.getElementById('transcript-full').style.display = 'flex';
+    document.getElementById('transcript-bar').classList.add('visible');
+    setStatus('listening');
+    addMsg('system', '🎙 Local transcription started (on-device Whisper, nothing leaves this Mac)');
+    return true;
+  } catch (e) {
+    addMsg('system', `✗ Could not start local transcription: ${e.message}. Is the sidecar installed? See README → Installation.`);
+    return false;
+  }
+}
 
-  state.audioStream  = stream;
-  state.isCapturing  = true;
-
-  // Capture bar
-  document.getElementById('capture-bar').classList.add('visible');
-  document.getElementById('capture-label').textContent = `CAPTURING · ${label.toUpperCase()}`;
+async function stopLocalCapture() {
+  if (state.localCapture) { try { state.localCapture.stop(); } catch (_) {} state.localCapture = null; }
+  try { await window.ghostmind.stopLocalTranscription(); } catch (_) {}
+  if (state.audioContext) { try { state.audioContext.close(); } catch (_) {} state.audioContext = null; }
+  state.isCapturing = false;
+  document.getElementById('capture-bar').classList.remove('visible');
+  document.getElementById('transcript-bar').classList.remove('visible');
   const badge = document.getElementById('audio-badge');
-  if (badge) badge.classList.add('visible', 'recording');
-  setStatus('listening');
-
-  // Waveform
-  state.audioContext = new AudioContext();
-  const src      = state.audioContext.createMediaStreamSource(stream);
-  const analyser = state.audioContext.createAnalyser();
-  analyser.fftSize = 512;
-  src.connect(analyser);
-
-  drawWaveform(analyser, 'waveform-canvas');
-  drawWaveform(analyser, 'waveform-big');
-  document.getElementById('audio-waveform-big').style.display = 'block';
-  document.getElementById('transcript-full').style.display = 'flex';
-
-  // Live speech recognition
-  startLiveTranscription(stream, label);
-
-  // Transcript panels
-  document.getElementById('transcript-bar').classList.add('visible');
-  addMsg('system', `🎙 Audio capture started: ${label}`);
+  if (badge) badge.classList.remove('visible', 'recording');
+  document.getElementById('audio-waveform-big').style.display = 'none';
+  const btn = document.getElementById('local-transcription-toggle-btn');
+  if (btn) { btn.textContent = '🎙 Start Transcription'; btn.style.color = 'var(--acid)'; }
+  setStatus('ready');
+  addMsg('system', '⏹ Local transcription stopped');
 }
 
 function drawWaveform(analyser, canvasId) {
@@ -792,133 +709,9 @@ function handleTranscriptLine(line) {
   if (!line || line.trim().length === 0) return;
   state.transcript.push(line);
   addTranscriptLine(line);
-  
   processTranscriptLine(line);
-  
   if (state.transcript.length % 6 === 0 && state.settings.proactiveMode) {
     triggerProactiveInsight();
-  }
-}
-
-function startWhisperTranscription(stream) {
-  try {
-    let chunks = [];
-    const options = { mimeType: 'audio/webm' };
-    const recorder = new MediaRecorder(stream, options);
-    state.mediaRecorder = recorder;
-
-    recorder.ondataavailable = async (e) => {
-      if (e.data.size > 0) {
-        chunks.push(e.data);
-      }
-    };
-
-    recorder.onstop = async () => {
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      chunks = [];
-
-      if (blob.size > 1000 && state.isCapturing) {
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          const base64data = reader.result.split(',')[1];
-          try {
-            const text = await window.ghostmind.transcribeAudio(base64data);
-            if (text && text.trim().length > 1) {
-              handleTranscriptLine(text.trim());
-            }
-          } catch (err) {
-            console.error('Whisper Transcription Error:', err);
-            addMsg('system', `✗ Whisper Error: ${err.message}`);
-          }
-        };
-        reader.readAsDataURL(blob);
-      }
-    };
-
-    recorder.start();
-    
-    state.recordingInterval = setInterval(() => {
-      if (state.isCapturing && recorder.state === 'recording') {
-        recorder.stop();
-        recorder.start();
-      } else {
-        clearInterval(state.recordingInterval);
-        state.recordingInterval = null;
-      }
-    }, 8000);
-
-    addMsg('system', '🎙 Whisper API transcription active (sending segments every 8s)');
-  } catch (err) {
-    console.error('Failed to start Whisper MediaRecorder:', err);
-    addMsg('system', `✗ Whisper Error: ${err.message}`);
-  }
-}
-
-function startLiveTranscription(stream, label) {
-  if (state.settings.transcriptionMethod === 'whisper') {
-    startWhisperTranscription(stream);
-    return;
-  }
-
-  if (state.settings.transcriptionMethod === 'chrome') {
-    addMsg('system', '🎙 Chrome Helper transcription is active. Native transcription is handled by the Chrome tab open at http://localhost:8844 (audio capture inside Electron is disabled for Chrome Helper mode).');
-    return;
-  }
-
-  if (!SR) {
-    addMsg('system', '⚠ Web Speech API (SpeechRecognition) is not supported in this Electron build.');
-    return;
-  }
-  const rec = new SR();
-  rec.continuous      = true;
-  rec.interimResults  = true;
-  rec.lang            = 'en-US';
-  state.recognition   = rec;
-  let lastFinal       = '';
-
-  rec.onerror = (e) => {
-    console.error('Speech Recognition Error:', e.error, e.message);
-    if (e.error === 'network' || e.error === 'service-not-allowed') {
-      addMsg('system', `🎙 Speech Recognition Error (${e.error}): Electron requires Google API keys for offline speech recognition. Please open http://localhost:8844 in Google Chrome to enable native transcription.`);
-    } else if (e.error === 'not-allowed') {
-      addMsg('system', `🎙 Speech Recognition Access Denied: Please check Microphone permissions in macOS System Settings.`);
-    } else {
-      addMsg('system', `🎙 Speech Recognition Warning: ${e.error}`);
-    }
-  };
-
-  rec.onresult = (e) => {
-    let final = '', interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) final += e.results[i][0].transcript;
-      else interim += e.results[i][0].transcript;
-    }
-    if (final && final !== lastFinal) {
-      lastFinal = final;
-      handleTranscriptLine(final.trim());
-    }
-  };
-
-  rec.onend = () => {
-    if (state.isCapturing) {
-      // Small timeout to prevent crash loop if start fails immediately
-      setTimeout(() => {
-        try {
-          if (state.isCapturing && state.recognition === rec) {
-            rec.start();
-          }
-        } catch (err) {
-          console.log('Failed to restart speech recognition:', err.message);
-        }
-      }, 400);
-    }
-  };
-
-  try {
-    rec.start();
-  } catch (err) {
-    console.error('Failed to start speech recognition:', err);
-    addMsg('system', `🎙 Speech Recognition Error: ${err.message}`);
   }
 }
 
@@ -938,36 +731,25 @@ function addTranscriptLine(line) {
   }
 }
 
-function stopAudioCapture() {
-  if (state.settings.transcriptionMethod === 'chrome') {
-    window.ghostmind.sendControl('stop');
-  }
-  if (state.audioStream) { state.audioStream.getTracks().forEach(t => t.stop()); state.audioStream = null; }
-  if (state.audioContext) { state.audioContext.close(); state.audioContext = null; }
-  if (state.recognition) { state.recognition.stop(); state.recognition = null; }
-  if (state.recordingInterval) { clearInterval(state.recordingInterval); state.recordingInterval = null; }
-  if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
-    try { state.mediaRecorder.stop(); } catch(_) {}
-    state.mediaRecorder = null;
-  }
-  state.isCapturing = false;
-  document.getElementById('capture-bar').classList.remove('visible');
-  document.getElementById('transcript-bar').classList.remove('visible');
-  const badge = document.getElementById('audio-badge');
-  if (badge) badge.classList.remove('visible', 'recording');
-  document.getElementById('audio-waveform-big').style.display = 'none';
-  document.querySelectorAll('.source-item').forEach(s => s.classList.remove('active'));
-  setStatus('ready');
-  addMsg('system', '⏹ Audio capture stopped');
-}
-
-document.getElementById('capture-stop').addEventListener('click', stopAudioCapture);
-document.getElementById('chrome-helper-toggle-btn')?.addEventListener('click', () => {
-  const isCurrentlyActive = document.getElementById('chrome-helper-toggle-btn').textContent.includes('Stop');
-  if (isCurrentlyActive) {
-    window.ghostmind.sendControl('stop');
+document.getElementById('capture-stop').addEventListener('click', async () => {
+  state.callCaptureWanted = false;
+  if (state.isMicRecording) { state.isMicRecording = false; state.dictationMode = false; micBtn.classList.remove('recording'); }
+  await stopLocalCapture();
+});
+document.getElementById('local-transcription-toggle-btn')?.addEventListener('click', async () => {
+  if (state.callCaptureWanted) {
+    state.callCaptureWanted = false;
+    if (!state.isMicRecording) await stopLocalCapture();
+    else {
+      const btn = document.getElementById('local-transcription-toggle-btn');
+      if (btn) { btn.textContent = '🎙 Start Transcription'; btn.style.color = 'var(--acid)'; }
+    }
   } else {
-    window.ghostmind.sendControl('start');
+    state.callCaptureWanted = true;
+    const ok = await ensureLocalCapture();
+    const btn = document.getElementById('local-transcription-toggle-btn');
+    if (btn && ok) { btn.textContent = '⏹ Stop Transcription'; btn.style.color = 'var(--amber)'; }
+    if (!ok) state.callCaptureWanted = false;
   }
 });
 document.getElementById('transcript-toggle-btn').addEventListener('click', () => {
@@ -1165,7 +947,7 @@ function initStealthCursor() {
     const computedStyle = window.getComputedStyle(target);
     const cursorType = computedStyle.cursor;
 
-    if (cursorType === 'pointer' || target.tagName === 'BUTTON' || target.closest('a') || target.classList.contains('qbtn') || target.classList.contains('tab') || target.classList.contains('source-item') || target.id === 'status' || target.id === 'keep-alive-banner' || target.id === 'chrome-helper-toggle-btn') {
+    if (cursorType === 'pointer' || target.tagName === 'BUTTON' || target.closest('a') || target.classList.contains('qbtn') || target.classList.contains('tab') || target.classList.contains('source-item') || target.id === 'status' || target.id === 'keep-alive-banner' || target.id === 'local-transcription-toggle-btn') {
       cursor.className = 'pointer';
     } else if (cursorType === 'text' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
       cursor.className = 'text';

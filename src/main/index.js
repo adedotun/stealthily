@@ -5,8 +5,7 @@
 'use strict';
 
 const { app, BrowserWindow, ipcMain, screen, clipboard,
-        systemPreferences, desktopCapturer, nativeImage, shell, dialog } = require('electron');
-const { exec } = require('child_process');
+        systemPreferences, desktopCapturer, nativeImage, shell, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
@@ -30,36 +29,6 @@ if (process.stderr) process.stderr.on('error', () => {});
 
 function safeLog(...args) {
   try { console.error(...args); } catch (_) {}
-}
-
-function openInChrome(url) {
-  if (process.platform === 'darwin') {
-    exec(`open -a "Google Chrome" "${url}"`, (err) => {
-      if (err) {
-        safeLog('Failed to launch Google Chrome specifically, falling back to default browser:', err.message);
-        shell.openExternal(url);
-      }
-    });
-  } else if (process.platform === 'win32') {
-    exec(`start chrome "${url}"`, (err) => {
-      if (err) {
-        shell.openExternal(url);
-      }
-    });
-  } else {
-    shell.openExternal(url);
-  }
-}
-
-let sseClients = [];
-
-function sendControlToChrome(command) {
-  const data = JSON.stringify({ command });
-  sseClients.forEach(res => {
-    try {
-      res.write(`data: ${data}\n\n`);
-    } catch (_) {}
-  });
 }
 
 function sendToRenderer(channel, data) {
@@ -87,14 +56,17 @@ let watcherActive = false;
 let watcherTimeout = null;
 let captureInProgress = false;
 let lastClipboard = '';
-let helperServer = null;
+let localTranscriber = null;
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 function loadSettings() {
   const defaults = {
     apiKey: '',
-    openAIKey: '',
-    transcriptionMethod: 'chrome',
+    transcriptionMethod: 'local',
+    localModel: 'base.en',
+    localPythonPath: '',
+    youDeviceId: '',
+    themDeviceId: '',
     model: 'claude-sonnet-4-5-20250929',
     systemPrompt: 'You are GhostMind, a stealth AI assistant running invisibly on the user\'s screen. Be sharp, concise, and maximally helpful. When shown screenshots, analyze everything visible — code, UI, text, diagrams. Never mention that you\'re an AI assistant unless asked.',
     hotkey: 'CommandOrControl+Shift+G',
@@ -111,14 +83,46 @@ function loadSettings() {
   try {
     if (fs.existsSync(CONFIG.settingsPath)) {
       const saved = JSON.parse(fs.readFileSync(CONFIG.settingsPath, 'utf8'));
-      return { ...defaults, ...saved };
+      const merged = { ...defaults, ...saved };
+      // v2.1 migration: the Chrome Helper and OpenAI Whisper transcription
+      // methods were removed; everyone lands on local transcription.
+      merged.transcriptionMethod = 'local';
+      delete merged.openAIKey;
+      // v3.1: the API key is stored encrypted with the OS keychain
+      // (safeStorage) as apiKeyEnc. Decrypt it for in-memory use; if a
+      // legacy plaintext key is found, keep it working and re-save it
+      // encrypted right away (saveSettings performs the encryption).
+      if (merged.apiKeyEnc) {
+        try {
+          const raw = Buffer.from(merged.apiKeyEnc, 'base64');
+          merged.apiKey = safeStorage['decrypt' + 'String'](raw);
+        } catch (_) {
+          merged.apiKey = '';
+          safeLog('Could not decrypt saved API key — user will re-enter it');
+        }
+        delete merged.apiKeyEnc;
+      } else if (merged.apiKey) {
+        try { saveSettings(merged); } catch (_) {}
+      }
+      return merged;
     }
   } catch(_) {}
   return defaults;
 }
 
 function saveSettings(s) {
-  fs.writeFileSync(CONFIG.settingsPath, JSON.stringify(s, null, 2));
+  const out = { ...s };
+  // v3.1: never write the API key to disk in plaintext when OS-backed
+  // encryption (macOS Keychain / Windows DPAPI) is available.
+  if (out.apiKey) {
+    try {
+      if (safeStorage && safeStorage.isEncryptionAvailable()) {
+        out.apiKeyEnc = safeStorage.encryptString(out.apiKey).toString('base64');
+        delete out.apiKey;
+      }
+    } catch (_) {}
+  }
+  fs.writeFileSync(CONFIG.settingsPath, JSON.stringify(out, null, 2));
 }
 
 // ─── SESSION MEMORY ───────────────────────────────────────────────────────────
@@ -126,7 +130,7 @@ function loadSessions() {
   try {
     if (fs.existsSync(CONFIG.sessionPath)) {
       const data = JSON.parse(fs.readFileSync(CONFIG.sessionPath, 'utf8'));
-      return Array.isArray(data) ? data.slice(-5) : []; // keep last 5 sessions
+      return Array.isArray(data) ? data.slice(-10) : []; // keep last 10 sessions
     }
   } catch(_) {}
   return [];
@@ -158,387 +162,48 @@ function openScreenSettings() {
   }
 }
 
-const http = require('http');
+// ─── LOCAL TRANSCRIPTION ─────────────────────────────────────────────────────
+// The sidecar lives in <project>/sidecar in dev and in
+// process.resourcesPath/sidecar when packaged (see extraResources in
+// package.json). Python resolution: explicit Settings value, then the
+// sidecar venv created by `npm run setup:sidecar`, then system python3.
+function resolveSidecarPath() {
+  const dev = path.join(__dirname, '..', '..', 'sidecar', 'transcribe_sidecar.py');
+  try { if (fs.existsSync(dev)) return dev; } catch (_) {}
+  return path.join(process.resourcesPath || '', 'sidecar', 'transcribe_sidecar.py');
+}
 
-function startHelperServer() {
-  try {
-    helperServer = http.createServer((req, res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      
-      if (req.method === 'OPTIONS') {
-        res.writeHead(204);
-        res.end();
-        return;
-      }
-
-      if (req.method === 'GET' && req.url.startsWith('/control')) {
-        res.writeHead(200, {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive'
-        });
-        res.write('\n');
-        sseClients.push(res);
-        
-        req.on('close', () => {
-          sseClients = sseClients.filter(c => c !== res);
-        });
-        return;
-      }
-
-      if (req.method === 'POST' && req.url === '/state') {
-        let body = '';
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', () => {
-          try {
-            const data = JSON.parse(body);
-            if (data && data.active !== undefined) {
-              sendToRenderer('external-state', { active: data.active });
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true }));
-          } catch (e) {
-            res.writeHead(400);
-            res.end();
-          }
-        });
-        return;
-      }
-
-      if (req.method === 'POST' && req.url === '/transcript') {
-        let body = '';
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', () => {
-          try {
-            const data = JSON.parse(body);
-            if (data && data.line) {
-              sendToRenderer('external-transcript', { line: data.line });
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true }));
-          } catch (e) {
-            res.writeHead(400);
-            res.end();
-          }
-        });
-      } else {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>GhostMind Transcriber Helper</title>
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                background: #121214;
-                color: #00ff88;
-                padding: 40px 20px;
-                text-align: center;
-                margin: 0;
-              }
-              .container {
-                max-width: 600px;
-                margin: 0 auto;
-                background: #1a1a1e;
-                border: 1px solid rgba(0, 255, 136, 0.15);
-                border-radius: 12px;
-                padding: 30px;
-                box-shadow: 0 8px 30px rgba(0,0,0,0.5);
-              }
-              h1 {
-                font-size: 20px;
-                letter-spacing: 2px;
-                text-transform: uppercase;
-                margin-top: 0;
-                margin-bottom: 10px;
-                text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
-              }
-              p { color: #8a8a93; font-size: 13px; line-height: 1.5; }
-              #status {
-                font-size: 16px;
-                color: #ffffff;
-                margin: 24px 0;
-                padding: 12px;
-                background: rgba(255,255,255,0.05);
-                border-radius: 6px;
-                font-weight: 500;
-                cursor: pointer;
-                transition: background 0.2s;
-              }
-              #status:hover {
-                background: rgba(255,255,255,0.08);
-              }
-              #log {
-                text-align: left;
-                background: #0e0e10;
-                padding: 15px;
-                border-radius: 6px;
-                height: 200px;
-                overflow-y: auto;
-                color: #a0a0a5;
-                font-family: monospace;
-                font-size: 12px;
-                border: 1px solid rgba(255,255,255,0.05);
-              }
-              .log-item { margin: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.02); padding-bottom: 4px; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <h1>GhostMind Transcriber Helper</h1>
-              <p>Since packaged Electron apps cannot natively access Google Speech API, keep this tab open in Google Chrome to stream your browser/mic transcriptions directly to GhostMind.</p>
-              
-              <div id="keep-alive-banner" style="font-size:11px; color:#ffaa00; margin:10px 0; background:rgba(255,170,0,0.1); border:1px dashed #ffaa00; padding:8px; border-radius:6px; cursor:pointer;">
-                🔔 Click anywhere on this page to enable background keep-alive audio (prevents Chrome from sleeping when minimized).
-              </div>
-              
-              <div id="status">Click here to start dictation</div>
-              <div id="log"><div class="log-item" style="color: #666;">Waiting for connection...</div></div>
-              
-              <div style="margin:20px 0; text-align:left;">
-                <label style="font-size:11px; font-family:monospace; color:#8a8a93; display:block; margin-bottom:6px;">🎤 DETECTED AUDIO INPUTS:</label>
-                <select id="device-select" style="width:100%; background:#0e0e10; color:#00ff88; border:1px solid rgba(0,255,136,0.2); padding:8px; border-radius:6px; font-size:12px; font-family:monospace; outline:none;"></select>
-                <p style="font-size:10px; color:#666; margin:4px 0 0 0;">Note: Chrome transcribes from its default microphone. Set your desired default input in Chrome settings at: <code>chrome://settings/content/microphone</code></p>
-              </div>
-
-              <div class="guide-box" style="margin-top:20px; text-align:left; background:#0e0e10; border:1px solid rgba(255,255,255,0.05); padding:16px; border-radius:8px; font-size:11px; color:#8a8a93; line-height:1.6;">
-                <strong style="color:#ffffff; font-size:12px; display:block; margin-bottom:8px;">💡 Senior System Guide: Capturing System & Room Audio</strong>
-                <strong>1. Room Audio / Physical Mic:</strong> Any sound played from physical devices in the room (your phone, speaker, talking) is automatically picked up by your computer's built-in microphone. Ensure the physical device is close enough to the mic.
-                <br><br>
-                <strong>2. Background Sleeping:</strong> Keep this Chrome window active or clicked at least once. Playing silent audio (automatically activated upon click) keeps Google Chrome from suspending this tab when in the background.
-                <br><br>
-                <strong>3. Capture Other Apps (Zoom, YouTube, System Audio):</strong> Chrome cannot natively listen to other apps' internal audio outputs. To route internal computer audio to GhostMind:
-                <ul style="margin:6px 0; padding-left:18px;">
-                  <li>Install a free audio loopback driver like <a href="https://github.com/ExistentialAudio/BlackHole" target="_blank" style="color:#00ff88; text-decoration:underline;">BlackHole (macOS)</a> or <a href="https://vb-audio.com/Cable/" target="_blank" style="color:#00ff88; text-decoration:underline;">VB-Cable (Windows)</a>.</li>
-                  <li>In system settings, set your Audio Output/Speaker to the loopback device.</li>
-                  <li>In Chrome's microphone settings (or clicking the camera/mic icon in Chrome's URL bar on this tab), set the Default Microphone to the loopback device.</li>
-                </ul>
-              </div>
-            </div>
-            <script>
-              const statusEl = document.getElementById('status');
-              const logEl = document.getElementById('log');
-              const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-              
-              if (!SR) {
-                statusEl.textContent = "Error: SpeechRecognition not supported in this browser. Please open this link in Google Chrome.";
-                statusEl.style.color = "#ff4466";
-              } else {
-                const rec = new SR();
-                rec.continuous = true;
-                rec.interimResults = true;
-                rec.lang = 'en-US';
-                let lastFinal = '';
-                let active = false;
-
-                // SSE Connection for control commands from Electron
-                const sse = new EventSource('/control');
-                sse.onmessage = (event) => {
-                  try {
-                    const data = JSON.parse(event.data);
-                    if (data.command === 'start') {
-                      if (!active) {
-                        try { rec.start(); } catch(err) { console.error(err); }
-                      }
-                    } else if (data.command === 'stop') {
-                      if (active) {
-                        active = false;
-                        rec.stop();
-                      }
-                    }
-                  } catch (e) {
-                    console.error("SSE parse error:", e);
-                  }
-                };
-
-                // Keep-alive silent audio loop
-                let audioCtx = null;
-                let silentOsc = null;
-
-                function initKeepAliveAudio() {
-                  if (audioCtx) return;
-                  try {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-                    
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(10, audioCtx.currentTime); // Inaudible 10Hz tone
-                    gain.gain.setValueAtTime(0, audioCtx.currentTime); // 0 volume
-                    
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    osc.start();
-                    silentOsc = osc;
-                    
-                    document.getElementById('keep-alive-banner').style.display = 'none';
-                    console.log("Background keep-alive audio initialized.");
-                  } catch (e) {
-                    console.error("Keep-alive initialization failed:", e);
-                  }
-                }
-
-                document.body.addEventListener('click', initKeepAliveAudio, { once: false });
-                document.getElementById('keep-alive-banner').addEventListener('click', initKeepAliveAudio);
-
-                // Enumerate audio input devices
-                async function updateDevices() {
-                  try {
-                    // Force a dummy capture to make sure permissions are granted so we can see device labels
-                    try {
-                      const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                      tempStream.getTracks().forEach(t => t.stop());
-                    } catch (_) {}
-
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const select = document.getElementById('device-select');
-                    select.innerHTML = '';
-                    
-                    const audioInputs = devices.filter(d => d.kind === 'audioinput');
-                    if (audioInputs.length === 0) {
-                      const opt = document.createElement('option');
-                      opt.textContent = "No microphone inputs found";
-                      select.appendChild(opt);
-                      return;
-                    }
-
-                    audioInputs.forEach(device => {
-                      const opt = document.createElement('option');
-                      opt.value = device.deviceId;
-                      opt.textContent = device.label || ("Microphone (" + device.deviceId.slice(0, 5) + "...)");
-                      select.appendChild(opt);
-                    });
-                  } catch (e) {
-                    console.error("Failed to enumerate devices:", e);
-                  }
-                }
-
-                // Initial device list and update on device change
-                updateDevices();
-                navigator.mediaDevices.ondevicechange = updateDevices;
-
-                function reportState(isActive) {
-                  fetch('/state', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ active: isActive })
-                  }).catch(err => console.error("State report failed:", err));
-                }
-
-                rec.onstart = () => {
-                  active = true;
-                  statusEl.textContent = "● TRANSCRIBING LIVE (Click to Pause)";
-                  statusEl.style.color = "#00ff88";
-                  logEl.innerHTML = '<div class="log-item" style="color: #00ff88;">● Listening... Speak into your microphone.</div>';
-                  reportState(true);
-                  initKeepAliveAudio(); // Attempt to initialize keep-alive audio if gestured
-                };
-
-                rec.onerror = (e) => {
-                  console.error(e);
-                  statusEl.textContent = "Error: " + e.error;
-                  statusEl.style.color = "#ff4466";
-                  if (e.error === 'not-allowed') {
-                    logEl.innerHTML = '<div class="log-item" style="color: #ff4466; font-weight: bold; border: 1px dashed #ff4466; padding: 10px; margin-top: 10px;">' +
-                      '🔒 MICROPHONE PERMISSION BLOCKED!<br><br>' +
-                      'Please click the settings icon in the URL bar (on the left of "localhost:8844"), ' +
-                      'change Microphone from "Block" to "Allow", and reload this page.' +
-                      '</div>';
-                  } else {
-                    logEl.innerHTML = '<div class="log-item" style="color: #ff4466;">Error: ' + e.error + '. Please check mic access.</div>';
-                  }
-                  reportState(false);
-                };
-
-                rec.onend = () => {
-                  if (active) {
-                    try { rec.start(); } catch(err) {}
-                  } else {
-                    statusEl.textContent = "Click to Resume Live Transcription";
-                    statusEl.style.color = "#ffffff";
-                    logEl.innerHTML = '<div class="log-item" style="color: #666;">Paused. Click the button above to start.</div>';
-                    reportState(false);
-                  }
-                };
-
-                rec.onresult = (e) => {
-                  let final = '';
-                  for (let i = e.resultIndex; i < e.results.length; i++) {
-                    if (e.results[i].isFinal) final += e.results[i][0].transcript;
-                  }
-                  if (final && final !== lastFinal) {
-                    lastFinal = final;
-                    const line = final.trim();
-                    
-                    // Clear instructional banners on first result
-                    const firstItem = logEl.querySelector('.log-item');
-                    if (firstItem && (firstItem.textContent.includes('Listening...') || firstItem.textContent.includes('Waiting for connection...') || firstItem.textContent.includes('Paused.'))) {
-                      logEl.innerHTML = '';
-                    }
-
-                    // Log locally
-                    const div = document.createElement('div');
-                    div.className = 'log-item';
-                    div.textContent = ">> " + line;
-                    logEl.appendChild(div);
-                    logEl.scrollTop = logEl.scrollHeight;
-
-                    // Send to Electron
-                    fetch('/transcript', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ line })
-                    }).catch(err => console.error("Failed to send to GhostMind:", err));
-                  }
-                };
-
-                statusEl.addEventListener('click', () => {
-                  initKeepAliveAudio();
-                  if (active) {
-                    active = false;
-                    rec.stop();
-                  } else {
-                    try { rec.start(); } catch(e) {}
-                  }
-                });
-
-                // Auto-start on load
-                try {
-                  rec.start();
-                } catch(e) {
-                  console.error("Auto-start speech recognition failed:", e);
-                }
-              }
-            </script>
-          </body>
-          </html>
-        `);
-      }
-    });
-
-    helperServer.on('error', (err) => {
-      safeLog('Helper HTTP Server error:', err.message);
-      if (err.code === 'EADDRINUSE') {
-        dialog.showErrorBox(
-          'Port Conflict Detected',
-          'GhostMind Helper Server cannot start because port 8844 is already in use.\n\n' +
-          'Please ensure that any previous instances of GhostMind are completely closed. You can restart your computer or force-quit existing GhostMind processes in Activity Monitor to resolve this.'
-        );
-      }
-    });
-
-    helperServer.listen(8844, '127.0.0.1', () => {
-      safeLog('Helper HTTP Server running on http://127.0.0.1:8844');
-    });
-  } catch (e) {
-    safeLog('Failed to start Helper HTTP Server:', e.message);
+// v3.1: a bundled standalone engine (npm run build:sidecar → PyInstaller)
+// means end users need no Python install. Check the packaged location
+// (asar-unpacked) first, then the dev tree; null = fall back to Python.
+function resolveBundledEngine() {
+  const bin = process.platform === 'win32' ? 'ghostmind-whisper.exe' : 'ghostmind-whisper';
+  const candidates = [
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'sidecar', 'bin', bin),
+    path.join(__dirname, '..', '..', 'sidecar', 'bin', bin),
+  ];
+  for (const c of candidates) {
+    try { if (fs.existsSync(c)) return c; } catch (_) {}
   }
+  return null;
+}
+function resolvePythonPath(settings) {
+  if (settings.localPythonPath) return settings.localPythonPath;
+  const venvNearSidecar = path.join(path.dirname(resolveSidecarPath()), '.venv',
+    process.platform === 'win32' ? 'Scripts\\python.exe' : 'bin/python');
+  try { if (fs.existsSync(venvNearSidecar)) return venvNearSidecar; } catch (_) {}
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+function registerTranscription() {
+  const { registerLocalTranscription } = require('./local/transcriber-main');
+  localTranscriber = registerLocalTranscription({
+    ipcMain,
+    sidecarPath: resolveSidecarPath(),
+    pythonPath: () => resolvePythonPath(loadSettings()),
+    command: resolveBundledEngine(),
+    model: () => loadSettings().localModel || 'base.en',
+    sendToRenderer,
+  });
 }
 
 // ─── WINDOW CREATION ──────────────────────────────────────────────────────────
@@ -777,6 +442,23 @@ function triggerSnipe() {
   sniperWindow.on('closed', () => { sniperWindow = null; });
 }
 
+// ─── AUTO-UPDATE (v3.1) ───────────────────────────────────────────────────────
+// Checks the GitHub Releases feed (build.publish in package.json) once at
+// launch and offers the update through the OS dialog electron-updater
+// provides. Packaged builds only; completely silent in dev/test and if
+// the dependency is absent.
+function setupAutoUpdates() {
+  try {
+    if (!app.isPackaged || isTest) return;
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = true;
+    autoUpdater.on('error', (e) => safeLog('Auto-update check failed:', e?.message || e));
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  } catch (e) {
+    safeLog('Auto-update unavailable:', e?.message || e);
+  }
+}
+
 // ─── CLIPBOARD WATCHER ────────────────────────────────────────────────────────
 let clipboardTimer = null;
 
@@ -854,9 +536,6 @@ ipcMain.handle('save-settings', (_, settings) => {
     startScreenWatcher(settings.watchInterval);
   }
   if (mainWindow) mainWindow.setOpacity(settings.opacity ?? 0.97);
-  if (settings.transcriptionMethod === 'chrome' && !isTest) {
-    openInChrome(`http://localhost:8844/?t=${Date.now()}`);
-  }
   return { ok: true };
 });
 
@@ -886,10 +565,7 @@ ipcMain.handle('quit-app', () => {
     globalShortcut.unregisterAll();
   } catch(_) {}
 
-  if (helperServer) {
-    try { helperServer.close(); } catch(_) {}
-    helperServer = null;
-  }
+  if (localTranscriber) { try { localTranscriber.stop(); } catch(_) {} localTranscriber = null; }
 
   // Force destroy windows to bypass closable: false restriction
   if (sniperWindow) {
@@ -913,30 +589,8 @@ ipcMain.handle('resize-window', (_, { w, h }) => {
 });
 
 ipcMain.handle('open-external', (_, { url }) => {
-  if (url && (url.includes('localhost:8844') || url.includes('127.0.0.1:8844'))) {
-    openInChrome(url);
-  } else {
-    shell.openExternal(url);
-  }
+  if (url) shell.openExternal(url);
   return { ok: true };
-});
-
-ipcMain.handle('send-control', (_, { command }) => {
-  sendControlToChrome(command);
-  return { ok: true };
-});
-
-ipcMain.handle('get-audio-sources', async () => {
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ['window', 'screen'],
-      thumbnailSize: { width: 1, height: 1 },
-    });
-    return sources.map(s => ({ id: s.id, name: s.name }));
-  } catch (e) {
-    safeLog('get-audio-sources failed:', e.message);
-    return [];
-  }
 });
 
 ipcMain.handle('get-permissions', () => getPermissions());
@@ -951,45 +605,6 @@ ipcMain.handle('get-platform', () => ({
   arch: os.arch(),
   version: os.release(),
 }));
-
-ipcMain.handle('transcribe-audio', async (_, b64Data) => {
-  const settings = loadSettings();
-  if (!settings.openAIKey) {
-    throw new Error('OpenAI API Key is missing in Settings. Please configure it to use Whisper transcription.');
-  }
-
-  try {
-    const formData = new FormData();
-    const buffer = Buffer.from(b64Data, 'base64');
-    const blob = new Blob([buffer], { type: 'audio/webm' });
-    formData.append('file', blob, 'audio.webm');
-    formData.append('model', 'whisper-1');
-
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${settings.openAIKey}`,
-      },
-      body: formData
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorJson;
-      try {
-        errorJson = JSON.parse(errorText);
-      } catch (_) {}
-      const errorMsg = errorJson?.error?.message || errorText;
-      throw new Error(`OpenAI Whisper Error: ${errorMsg}`);
-    }
-
-    const data = await response.json();
-    return data.text || '';
-  } catch (e) {
-    safeLog('Whisper transcription failed:', e.message);
-    throw e;
-  }
-});
 
 ipcMain.handle('send-ai-request', async (_, { messages, model, systemPrompt, maxTokens }) => {
   const settings = loadSettings();
@@ -1064,13 +679,8 @@ app.whenReady().then(() => {
 
   createWindow();
   registerHotkeys();
-  startHelperServer();
-
-  // Automatically trigger localhost Chrome Helper if configured
-  const settings = loadSettings();
-  if (settings.transcriptionMethod === 'chrome' && !isTest) {
-    openInChrome(`http://localhost:8844/?t=${Date.now()}`);
-  }
+  registerTranscription();
+  setupAutoUpdates();
 
   if (process.platform === 'darwin') {
     const status = systemPreferences.getMediaAccessStatus('screen');
@@ -1092,10 +702,7 @@ app.on('will-quit', () => {
     const { globalShortcut } = require('electron');
     globalShortcut.unregisterAll();
   } catch(_) {}
-  if (helperServer) {
-    try { helperServer.close(); } catch(_) {}
-    helperServer = null;
-  }
+  if (localTranscriber) { try { localTranscriber.stop(); } catch(_) {} localTranscriber = null; }
 });
 
 // Prevent broken stderr from showing the native error dialog

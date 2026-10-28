@@ -859,7 +859,7 @@ body, input, textarea, button, a, select, canvas, span, div {
           </svg>
         </div>
         <span id="logo-name">GhostMind</span>
-        <span id="logo-version">v2.0</span>
+        <span id="logo-version">v2.1</span>
       </div>
     </div>
     <div id="titlebar-right">
@@ -962,33 +962,19 @@ body, input, textarea, button, a, select, canvas, span, div {
   <!-- PANEL: AUDIO -->
   <div class="panel" id="panel-audio-panel">
     <div id="panel-audio">
-      <div id="native-audio-sources">
-        <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--muted2);text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid var(--line);">SELECT AUDIO SOURCE</div>
-        <div class="source-item" id="src-mic">
-          <div class="source-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-          </div>
-          <div>
-            <div class="source-name">Microphone</div>
-            <div class="source-type">DEFAULT INPUT</div>
-          </div>
-        </div>
-        <div id="desktop-sources"></div>
-      </div>
-      <div id="chrome-helper-info" style="display:none; flex-direction:column; gap:12px; border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:var(--bg2);">
+      <div id="local-audio-panel" style="display:flex; flex-direction:column; gap:12px; border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:var(--bg2);">
         <div style="font-family:var(--font-mono); font-size:10px; letter-spacing:1px; color:var(--acid); display:flex; align-items:center; gap:6px;">
           <span style="display:inline-block; width:6px; height:6px; background:var(--acid); border-radius:50%; box-shadow:0 0 8px var(--acid);"></span>
-          CHROME HELPER ACTIVE
+          LOCAL TRANSCRIPTION · ON-DEVICE WHISPER
         </div>
         <div style="font-size:11px; color:var(--text-dim); line-height:1.6;">
-          Transcriptions are captured and processed by the Google Chrome tab open at:
-          <a href="#" onclick="window.ghostmind.openExternal('http://localhost:8844')" style="color:var(--acid); text-decoration:underline; font-family:var(--font-mono); display:block; margin:6px 0;">http://localhost:8844</a>
+          Captures two tracks on this machine and transcribes them locally — no browser tab, no cloud speech service:
           <ol style="margin:6px 0; padding-left:16px;">
-            <li>Ensure the Chrome helper tab is open and loaded.</li>
-            <li>If prompted, grant microphone access in Google Chrome.</li>
-            <li>Speak into your microphone. Transcripts will automatically stream into this chat in real-time.</li>
+            <li><strong>You</strong> — your microphone</li>
+            <li><strong>Them</strong> — the BlackHole / Loopback device carrying your call</li>
           </ol>
-          <button class="snipe-btn" id="chrome-helper-toggle-btn" style="margin-top:10px; color:var(--acid);">🎙 Start Dictation</button>
+          Pick both devices in <strong>Settings → Transcription</strong>. Route the call app's speaker to a Multi-Output Device (headphones + BlackHole 2ch) so you can hear them while they're captured. Full setup: README → Installation.
+          <button class="snipe-btn" id="local-transcription-toggle-btn" style="margin-top:10px; color:var(--acid);">🎙 Start Transcription</button>
         </div>
       </div>
       <div id="audio-waveform-big" style="height:60px;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--line);overflow:hidden;display:none;">
@@ -1023,15 +1009,20 @@ body, input, textarea, button, a, select, canvas, span, div {
           <input type="password" id="s-apikey" placeholder="sk-ant-api03-...">
         </div>
         <div class="setting-row">
-          <label>OpenAI API Key (stealth Whisper STT)</label>
-          <input type="password" id="s-openaikey" placeholder="sk-proj-...">
+          <label>Local Whisper Model</label>
+          <select id="s-localmodel">
+            <option value="tiny.en">tiny.en — fastest, ~75MB download</option>
+            <option value="base.en">base.en — balanced (recommended), ~150MB</option>
+            <option value="small.en">small.en — most accurate, ~500MB</option>
+          </select>
         </div>
         <div class="setting-row">
-          <label>Transcription Method</label>
-          <select id="s-transcribemethod">
-            <option value="chrome">Local Chrome Helper (Free, requires open tab)</option>
-            <option value="whisper">OpenAI Whisper API (Paid, 100% stealthy)</option>
-          </select>
+          <label>Your Microphone (track: You)</label>
+          <select id="s-you-device"></select>
+        </div>
+        <div class="setting-row">
+          <label>Call Audio Device (track: Them) — BlackHole / Loopback</label>
+          <select id="s-them-device"></select>
         </div>
         <div class="setting-row">
           <label>Model</label>
@@ -1136,6 +1127,9 @@ body, input, textarea, button, a, select, canvas, span, div {
   <div id="proactive-badge"></div>
 
 </div>
+<script src="local/wav.js"></script>
+<script src="local/segmenter.js"></script>
+<script src="local/capture.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

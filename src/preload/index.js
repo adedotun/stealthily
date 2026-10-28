@@ -23,16 +23,18 @@ contextBridge.exposeInMainWorld('ghostmind', {
   moveWindow:     (x, y)   => ipcRenderer.invoke('move-window', { x, y }),
   resizeWindow:   (w, h)   => ipcRenderer.invoke('resize-window', { w, h }),
   openExternal:   (url)    => ipcRenderer.invoke('open-external', { url }),
-  sendControl:    (command)=> ipcRenderer.invoke('send-control', { command }),
   getPlatform:    ()       => ipcRenderer.invoke('get-platform'),
 
   // ── Screen capture ────────────────────────────────────────────────────────
   captureScreen:  (rect)   => ipcRenderer.invoke('capture-screen', rect),
   triggerSnipe:   ()       => ipcRenderer.invoke('trigger-snipe'),
-  getAudioSources: ()      => ipcRenderer.invoke('get-audio-sources'),
-  transcribeAudio: (b64)   => ipcRenderer.invoke('transcribe-audio', b64),
   getPermissions:  ()      => ipcRenderer.invoke('get-permissions'),
   openScreenSettings: ()  => ipcRenderer.invoke('open-screen-settings'),
+
+  // ── Local transcription (v2.1, replaces Chrome Helper + Whisper API) ─────
+  startLocalTranscription: ()        => ipcRenderer.invoke('local-transcription-start'),
+  stopLocalTranscription:  ()        => ipcRenderer.invoke('local-transcription-stop'),
+  transcribeLocalSegment:  (segment) => ipcRenderer.invoke('transcribe-local-segment', segment),
 
   // ── Sniper window IPC (used by sniper.html) ───────────────────────────────
   snipeResult:    (rect)   => ipcRenderer.invoke('snipe-result', { rect }),
