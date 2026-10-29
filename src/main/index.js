@@ -55,6 +55,7 @@ let isVisible    = true;
 let watcherActive = false;
 let watcherTimeout = null;
 let captureInProgress = false;
+let _captureForcedOnce = false; // v3.5.4: one real capture attempt past a 'denied' preflight
 let lastClipboard = '';
 let localTranscriber = null;
 
@@ -85,6 +86,7 @@ function loadSettings() {
     model: 'claude-sonnet-5-5',
     systemPrompt: GHOSTMIND_PROMPT,
     deepThinking: false,
+    codeOnlyMode: true,
     hotkey: 'CommandOrControl+Shift+G',
     snipeHotkey: 'CommandOrControl+Shift+S',
     watchInterval: 0,
@@ -177,6 +179,61 @@ function loadSessions() {
 function saveSession(summary) {
   try { memoryStore().add(summary); } catch (_) {}
 }
+
+// v3.5.3 auto-save: the renderer keeps main supplied with a draft summary
+// of the live session; on will-quit it is written to the store so quitting
+// never silently loses an unsaved conversation.
+let _sessionDraft = '';
+ipcMain.on('session-draft', (_, text) => { _sessionDraft = typeof text === 'string' ? text.slice(0, 2000) : ''; });
+ipcMain.on('session-draft-clear', () => { _sessionDraft = ''; });
+
+// v3.5.6 diagnostics: the renderer appends audio-device facts (what it
+// enumerated, what it resolved, per-track start errors) to
+// userData/audio-debug.log so device problems are diagnosable from the
+// log instead of guesswork — the app window itself can't be inspected.
+ipcMain.on('audio-debug', (_, line) => {
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'audio-debug.log'), String(line).slice(0, 4000) + '\n'); } catch (_) {}
+});
+
+// ─── v3.5.9 SECURE EVENT INPUT ───────────────────────────────────────────────
+// While any GhostMind window is focused, enable macOS Secure Event
+// Input (the mechanism behind Terminal's "Secure Keyboard Entry" and
+// password fields): CGEvent taps owned by other processes then receive
+// NO keyboard events at all, so nothing the user types into GhostMind
+// can be observed by monitoring software. Released as soon as no
+// GhostMind window is focused, and on quit. The native helper is a
+// tiny N-API addon (native/secure-input); if it is missing or fails
+// to load, this whole feature degrades to a no-op.
+function _appendDebugLog(line) {
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'audio-debug.log'), line + '\n'); } catch (_) {}
+}
+let _secureInput = null;
+try { _secureInput = require('secure-input'); } catch (_) { _secureInput = null; }
+let _siEnabled = false;
+function _syncSecureInput() {
+  if (!_secureInput || !_secureInput.available) return;
+  let anyFocused = false;
+  try { anyFocused = BrowserWindow.getAllWindows().some(w => !w.isDestroyed() && w.isFocused()); } catch (_) {}
+  try {
+    if (anyFocused && !_siEnabled) {
+      _secureInput.enable();
+      _siEnabled = true;
+      _appendDebugLog(`[${new Date().toISOString()}] secure-input: enabled (a GhostMind window gained focus)`);
+    } else if (!anyFocused && _siEnabled) {
+      _secureInput.disable();
+      _siEnabled = false;
+      _appendDebugLog(`[${new Date().toISOString()}] secure-input: disabled (no GhostMind window focused)`);
+    }
+  } catch (_) {}
+}
+app.on('browser-window-focus', _syncSecureInput);
+app.on('browser-window-blur', () => setImmediate(_syncSecureInput));
+app.on('before-quit', () => {
+  if (_secureInput && _siEnabled) { try { _secureInput.disable(); } catch (_) {} _siEnabled = false; }
+});
+app.whenReady().then(() => {
+  _appendDebugLog(`[${new Date().toISOString()}] secure-input: addon ${(_secureInput && _secureInput.available) ? 'loaded' : 'NOT available'} at startup`);
+});
 
 function getPermissions() {
   const perms = { screen: 'unknown', microphone: 'unknown' };
@@ -787,8 +844,19 @@ async function captureScreen(regionRect, { lowQuality = false } = {}) {
     if (process.platform === 'darwin') {
       const status = systemPreferences.getMediaAccessStatus('screen');
       if (status === 'denied' || status === 'restricted') {
-        safeLog('Screen capture denied — grant Screen Recording in System Settings');
-        return null;
+        // v3.5.4: a 'denied' preflight can be a dead end — with no TCC
+        // record at all it can never turn 'granted', because the capture
+        // attempt that would register the app never happens; and a stale
+        // record can report 'denied' while Settings shows the app allowed.
+        // Force ONE real attempt per process: a missing record registers,
+        // a wrong preflight is bypassed, and a genuine denial just yields
+        // empty sources below. Later calls short-circuit as before.
+        if (_captureForcedOnce) {
+          safeLog('Screen capture denied — grant Screen Recording in System Settings');
+          return null;
+        }
+        _captureForcedOnce = true;
+        safeLog(`Screen preflight '${status}' — forcing one real capture attempt`);
       }
     }
 
@@ -1324,6 +1392,9 @@ ipcMain.handle('get-diagnostics', async () => {
       python: resolvePythonPath() || null,
       sidecar: sidecarExists,
     },
+    secureInput: _secureInput && _secureInput.available
+      ? { available: true, enabled: _secureInput.isEnabled() }
+      : { available: false, enabled: false },
   };
 });
 
@@ -1364,7 +1435,26 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
+// v3.5.4: the main window is closable:false (stealth) and the sniper
+// overlay is too — the standard quit sequence (Dock Quit, Cmd+Q via the
+// system, System Settings' Quit & Reopen, SIGTERM) tries to close all
+// windows before quitting, the windows refuse, and the quit silently
+// aborts: the app appears to ignore quit entirely. Destroying the windows
+// here — exactly what the in-app Quit button's handler does — lets every
+// quit path complete. will-quit (auto-save, cleanup) still runs after.
+app.on('before-quit', () => {
+  if (sniperWindow) { try { sniperWindow.destroy(); } catch (_) {} sniperWindow = null; }
+  if (mainWindow) { try { mainWindow.destroy(); } catch (_) {} mainWindow = null; }
+});
+
+// Route SIGTERM through the normal quit path so it gets the same cleanup
+// (and the before-quit window teardown above) instead of dying mid-state.
+process.on('SIGTERM', () => { try { app.quit(); } catch (_) {} });
+
 app.on('will-quit', () => {
+  // v3.5.3: persist the auto-save draft before anything else tears down.
+  // The store write is synchronous (node:sqlite), so it lands even here.
+  if (_sessionDraft) { try { saveSession(_sessionDraft); } catch (_) {} _sessionDraft = ''; }
   if (clipboardTimer) { clearInterval(clipboardTimer); clipboardTimer = null; }
   stopScreenWatcher();
   try {

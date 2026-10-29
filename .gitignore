@@ -1,6 +1,7 @@
 node_modules/
 dist/
 sidecar/.venv/
+sidecar/bin/
 __pycache__/
 *.pyc
 .env

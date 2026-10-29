@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('ghostmind', {
   // ── Sessions / Memory ─────────────────────────────────────────────────────
   getSessions:    ()       => ipcRenderer.invoke('get-sessions'),
   saveSession:    (data)   => ipcRenderer.invoke('save-session', data),
+  // v3.5.3 auto-save: fire-and-forget draft updates (send, not invoke —
+  // the renderer must never block on these, including during quit)
+  updateSessionDraft: (text) => ipcRenderer.send('session-draft', text),
+  clearSessionDraft:  ()     => ipcRenderer.send('session-draft-clear'),
+  // v3.5.6 diagnostics: fire-and-forget audio-device log lines.
+  audioDebug:         (line) => ipcRenderer.send('audio-debug', line),
 
   // ── Window control ────────────────────────────────────────────────────────
   hide:           ()       => ipcRenderer.invoke('hide-window'),
@@ -50,6 +56,7 @@ contextBridge.exposeInMainWorld('ghostmind', {
     const allowed = [
       'init', 'clipboard-change', 'screen-snapshot',
       'snipe-captured', 'focus-input', 'permission-needed',
+      'transcription-error', 'transcription-notice',
       'external-transcript', 'external-state',
       'ai-stream-chunk', 'ai-stream-done', 'ai-stream-error',
     ];

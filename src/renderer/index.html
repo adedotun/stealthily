@@ -520,14 +520,25 @@ body, input, textarea, button, a, select, canvas, span, div {
   align-items: flex-start;
 }
 #snipe-tray.visible { display: flex; }
-#snipe-thumb {
-  width: 80px;
-  height: 54px;
+#snipe-left { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+#snipe-thumbs { display: flex; gap: 6px; flex-wrap: wrap; max-width: 240px; }
+#snipe-count { font-size: 10px; color: var(--text-dim); }
+.snipe-thumb-wrap { position: relative; flex-shrink: 0; }
+.snipe-thumb-wrap img {
+  width: 64px;
+  height: 44px;
   object-fit: cover;
-  border-radius: var(--radius);
+  border-radius: 6px;
   border: 1px solid var(--line2);
   cursor: zoom-in;
-  flex-shrink: 0;
+  display: block;
+}
+.snipe-x {
+  position: absolute; top: -6px; right: -6px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg4); color: var(--text);
+  border: 1px solid var(--line2);
+  font-size: 10px; line-height: 1; cursor: pointer; padding: 0;
 }
 #snipe-actions { flex: 1; display: flex; flex-direction: column; gap: 6px; }
 #snipe-actions-row { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1039,7 +1050,7 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
           </svg>
         </div>
         <span id="logo-name">GhostMind</span>
-        <span id="logo-version">v3.4</span>
+        <span id="logo-version">v3.5</span>
       </div>
     </div>
     <div id="titlebar-right">
@@ -1117,7 +1128,10 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
 
     <!-- Snipe tray -->
     <div id="snipe-tray">
-      <img id="snipe-thumb" alt="capture" />
+      <div id="snipe-left">
+        <div id="snipe-thumbs"></div>
+        <div id="snipe-count"></div>
+      </div>
       <div id="snipe-actions">
         <div id="snipe-actions-row">
           <button class="snipe-btn primary" id="snipe-solve">⚡ Solve</button>
@@ -1128,6 +1142,7 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
         <div style="display:flex;align-items:center;gap:6px;">
           <input id="snipe-custom-prompt" placeholder="Custom question about this..." style="flex:1;font-size:11px;padding:4px 8px;border-radius:4px;border:1px solid var(--line2);background:var(--bg3);color:var(--text);outline:none;font-family:var(--font-ui);">
           <button class="snipe-btn" id="snipe-ask">Ask</button>
+          <button class="snipe-btn" id="snipe-add" title="Take another snapshot and add it to this batch">＋ Add</button>
           <button id="snipe-dismiss">×</button>
         </div>
       </div>
@@ -1230,6 +1245,10 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
           <select id="s-them-device"></select>
         </div>
         <div class="setting-row">
+          <label></label>
+          <span class="diag-hint">If this ever points at your microphone (or “Default”), your own voice gets labelled “Them”. GhostMind repairs that automatically at capture start when a BlackHole/Loopback device exists.</span>
+        </div>
+        <div class="setting-row">
           <label>Model</label>
           <select id="s-model">
             <option value="claude-sonnet-5-5">Claude 5.5 Sonnet (recommended)</option>
@@ -1253,11 +1272,16 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
         </div>
         <div class="setting-row">
           <div class="setting-row-inline">
+            <label>Code Only — no comments, no explanations</label>
+            <div class="toggle" id="t-codeonly"></div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-inline">
             <label>Health Check</label>
             <button class="snipe-btn" id="run-checks-btn">🩺 RUN CHECKS</button>
           </div>
           <div id="diag-results" style="display:none;margin-top:6px;"></div>
-          </div>
         </div>
         <div class="setting-row">
           <label>System Prompt</label>
@@ -1382,6 +1406,7 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
         <select class="wiz-select" id="wiz-you"></select>
         <label class="wiz-label" for="wiz-them">Call audio (the other person)</label>
         <select class="wiz-select" id="wiz-them"></select>
+        <div class="wiz-note">⚠ Never pick “Default” for call audio — that's your own microphone, and your voice would be labelled as the other person. GhostMind auto-picks BlackHole/Loopback whenever it finds one.</div>
         <div id="wiz-level"><div id="wiz-level-fill"></div></div>
         <button class="wiz-btn secondary" id="wiz-test-btn">🎤 Test my voice</button>
         <button class="wiz-btn" id="wiz-sound-btn">Sounds good — continue</button>

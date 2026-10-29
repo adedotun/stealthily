@@ -28,6 +28,7 @@ CLI smoke test:
 import sys, os, io, json, base64, argparse
 
 MODEL = os.environ.get("GHOSTMIND_WHISPER_MODEL", "base.en")
+_VAD_OK = True  # v3.5: flipped off permanently if a Silero pass ever throws
 MOCK = os.environ.get("GHOSTMIND_ASR_MOCK") == "1"
 
 _engine = None
@@ -78,12 +79,27 @@ def transcribe_wav_bytes(wav_bytes, partial=False):
         # energy VAD let through (breaths, keyboard, room noise), which
         # cuts phantom/hallucinated lines. Partials skip it: they're
         # mid-utterance and need every scrap of signal, fast.
-        segments, info = model.transcribe(
-            wav_bytes_to_float32(wav_bytes), beam_size=1,
-            vad_filter=not partial,
-            vad_parameters=dict(min_silence_duration_ms=500) if not partial else None,
-        )
-        segs = list(segments)
+        # v3.5: fail-safe — if the Silero pass ever throws (e.g. its onnx
+        # runtime misbehaves inside the frozen binary), retry ONCE without
+        # it and never try it again this session. A VAD failure must never
+        # silence transcription entirely.
+        global _VAD_OK
+        audio = wav_bytes_to_float32(wav_bytes)
+        use_vad = (not partial) and _VAD_OK
+        try:
+            segments, info = model.transcribe(
+                audio, beam_size=1,
+                vad_filter=use_vad,
+                vad_parameters=dict(min_silence_duration_ms=500) if use_vad else None,
+            )
+            segs = list(segments)
+        except Exception:
+            if not use_vad:
+                raise
+            _VAD_OK = False
+            print("[ghostmind] Silero VAD failed; continuing without it", file=sys.stderr)
+            segments, info = model.transcribe(audio, beam_size=1, vad_filter=False)
+            segs = list(segments)
         text = " ".join(s.text.strip() for s in segs).strip()
         logprob = (sum(s.avg_logprob for s in segs) / len(segs)) if segs else None
         return {"text": text, "avg_logprob": logprob, "language": getattr(info, "language", "en")}

@@ -10,7 +10,7 @@ const state = {
   transcript:    [],          // live audio transcript lines
   sessions:      [],          // past session summaries
   isThinking:    false,
-  snipeImage:    null,        // base64 PNG from sniper
+  snipeImages:   [],          // v3.5: queue of base64 PNGs from the sniper
   audioContext:  null,
   isCapturing:   false,
   isMicRecording: false,
@@ -33,6 +33,9 @@ function handleInit({ settings, sessions, permissions }) {
   showStartupHints(state.settings, permissions);
   refreshPermissionStatus(permissions);
   populateAudioDevices();
+  // v3.5.8: warm the Whisper engine in the background so the first
+  // Start Listening picks up in a couple of seconds (see below).
+  prewarmTranscription();
   // First run (no AI key yet): greet with the friendly setup wizard.
   if (!state.settings.apiKey && !state.settings.anthropicKey) {
     setTimeout(() => openWizard(), 600);
@@ -40,6 +43,24 @@ function handleInit({ settings, sessions, permissions }) {
 }
 
 window.ghostmind.on('init', handleInit);
+
+// v3.5: transcription problems are VISIBLE now. Before this, a failing
+// engine produced permanent silence behind a healthy-looking CAPTURING bar.
+// Errors are throttled: the same error re-appears at most every 30 s.
+let lastTxError = { text: '', at: 0 };
+window.ghostmind.on('transcription-error', ({ error }) => {
+  if (!error) return;
+  const now = Date.now();
+  if (error === lastTxError.text && now - lastTxError.at < 30000) return;
+  lastTxError = { text: error, at: now };
+  addMsg('system', `⚠ Transcription problem: ${error}`);
+});
+let txNoticeShown = false;
+window.ghostmind.on('transcription-notice', ({ text }) => {
+  if (!text || txNoticeShown) return;
+  txNoticeShown = true;
+  addMsg('system', `⏳ ${text}`);
+});
 
 window.ghostmind.on('external-transcript', ({ line, partial, speaker }) => {
   if (!line) return;
@@ -368,6 +389,8 @@ document.getElementById('run-checks-btn')?.addEventListener('click', async () =>
     const eng = diag.engine || {};
     const engOk = eng.bundled || (eng.python && eng.sidecar);
     mkRow(engOk ? '✅' : '❌', eng.bundled ? 'Transcription engine — bundled binary' : 'Transcription engine — Python sidecar', engOk ? '' : 'Run: npm run setup:sidecar (README install guide).');
+    const si = diag.secureInput || {};
+    mkRow(si.available ? '✅' : '⚠️', si.available ? `Secure input — ${si.enabled ? 'ON (this window is focused)' : 'ready, engages when this window is focused'}` : 'Secure input unavailable', si.available ? '' : 'The native helper is missing from this build; keystrokes typed here are not shielded from event taps.');
   }
 });
 
@@ -534,11 +557,15 @@ async function wizFillDevices() {
         opt.textContent = d.label || `Microphone ${i + 1}`;
         sel.appendChild(opt);
       });
-      const wanted = preferCall ? state.settings?.themDeviceId : state.settings?.youDeviceId;
-      if (wanted && devices.some(d => d.deviceId === wanted)) sel.value = wanted;
-      else if (preferCall) {
-        const bh = devices.findIndex(d => /blackhole|loopback/i.test(d.label || ''));
-        if (bh >= 0) sel.selectedIndex = bh;
+      // v3.5.5: resolve through the shared helpers — a saved 'default'
+      // (the microphone) must never land on the Call audio picker.
+      if (preferCall) {
+        const youVal = document.getElementById('wiz-you')?.value || state.settings?.youDeviceId;
+        const r = resolveThemDeviceId(devices, state.settings?.themDeviceId, youVal);
+        if (r) sel.value = r;
+      } else {
+        const r = resolveYouDeviceId(devices, state.settings?.youDeviceId, state.settings?.themDeviceId);
+        if (r) sel.value = r;
       }
     };
     fill('wiz-you', false);
@@ -637,6 +664,9 @@ function applySettings(s) {
   if (s.deepThinking) document.getElementById('t-deepthinking').classList.add('on');
   else document.getElementById('t-deepthinking').classList.remove('on');
 
+  if (s.codeOnlyMode) document.getElementById('t-codeonly').classList.add('on');
+  else document.getElementById('t-codeonly').classList.remove('on');
+
   // Device dropdowns are populated async by populateAudioDevices();
   // apply the saved picks once options exist.
   if (s.youDeviceId)  sid('s-you-device').value  = s.youDeviceId;
@@ -669,6 +699,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     copilotAutoAnswer: document.getElementById('t-copilot').classList.contains('on'),
     promptCaching: document.getElementById('t-promptcaching').classList.contains('on'),
     deepThinking: document.getElementById('t-deepthinking').classList.contains('on'),
+    codeOnlyMode: document.getElementById('t-codeonly').classList.contains('on'),
   };
   await window.ghostmind.saveSettings(s);
   state.settings = s;
@@ -684,11 +715,12 @@ document.getElementById('s-theme').addEventListener('change', (e) => {
   applyTheme(e.target.value);
 });
 
-// Toggles
-['t-clipboard','t-proactive','t-copilot','t-promptcaching'].forEach(id => {
-  document.getElementById(id).addEventListener('click', (e) => {
-    e.currentTarget.classList.toggle('on');
-  });
+// Toggles — bind every .toggle in Settings. (v3.5 fix: t-deepthinking was
+// added to the panel in v3.3 but never to the old hand-maintained list, so
+// the Deep Thinking switch was dead. Binding by class makes that class of
+// bug impossible for future toggles.)
+document.querySelectorAll('#panel-settings .toggle').forEach(t => {
+  t.addEventListener('click', () => { t.classList.toggle('on'); });
 });
 
 // ─── STATUS ───────────────────────────────────────────────────────────────────
@@ -724,7 +756,9 @@ function addMsg(role, content, imgB64, isCopilot = false, usageStats = null) {
 
   let inner = '';
   if (imgB64) {
-    inner += `<img class="msg-img" src="data:image/png;base64,${imgB64}" alt="screenshot">`;
+    // v3.5: one image or an array of queued snapshots
+    const imgs = Array.isArray(imgB64) ? imgB64 : [imgB64];
+    inner += imgs.map(b => `<img class="msg-img" src="data:image/png;base64,${b}" alt="screenshot">`).join('');
   }
   let bubbleContent = renderMarkdown(content);
   if (isCopilot) {
@@ -826,6 +860,11 @@ function streamAIRequest(payload, typingEl) {
 }
 
 // ─── AI ENGINE ────────────────────────────────────────────────────────────────
+// v3.5.2 Code Only mode: appended to the system prompt when the Settings
+// toggle is on. Wording is an explicit override — the built-in Snipe Solve
+// prompt asks for commented code, and this must win.
+const CODE_ONLY_SUFFIX = '\n\nCODE-ONLY MODE IS ON: when the request involves code, reply with ONLY the code in a single code block. No comments inside the code, no explanations, no preamble, no follow-up notes. This overrides any other instruction asking for comments or step-by-step explanation.';
+
 async function askAI(userText, imgB64, apiTextOverride) {
   if (!state.settings.apiKey) {
     addMsg('system', '⚠ Add API key in Settings');
@@ -852,11 +891,12 @@ async function askAI(userText, imgB64, apiTextOverride) {
     : '';
 
   const apiMessages = state.messages.slice(0, -1); // don't re-include what we just pushed
-  if (imgB64) {
+  const imgList = !imgB64 ? [] : (Array.isArray(imgB64) ? imgB64 : [imgB64]);
+  if (imgList.length > 0) {
     apiMessages.push({
       role: 'user',
       content: [
-        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imgB64 } },
+        ...imgList.map(b => ({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: b } })),
         { type: 'text', text: sessionCtx + content }
       ]
     });
@@ -871,7 +911,7 @@ async function askAI(userText, imgB64, apiTextOverride) {
     const text = await streamAIRequest({
       messages: apiMessages,
       model: state.settings.model || 'claude-sonnet-5-5',
-      systemPrompt: state.settings.systemPrompt || 'You are GhostMind, an invisible AI copilot. Lead with the answer, keep it tight and scannable, no preamble.',
+      systemPrompt: (state.settings.systemPrompt || 'You are GhostMind, an invisible AI copilot. Lead with the answer, keep it tight and scannable, no preamble.') + (state.settings.codeOnlyMode ? CODE_ONLY_SUFFIX : ''),
       maxTokens: 2048
     }, typingEl);
     typingEl.remove();
@@ -880,6 +920,7 @@ async function askAI(userText, imgB64, apiTextOverride) {
     // Update state messages correctly
     state.messages[state.messages.length - 1] = { role: 'user', content: userText };
     state.messages.push({ role: 'assistant', content: text });
+    pushAutoDraft();
   } catch (e) {
     typingEl.remove();
     addMsg('system', `✗ API Error: ${e.message}`);
@@ -891,36 +932,30 @@ async function askAI(userText, imgB64, apiTextOverride) {
 }
 
 // ─── COPILOT AUTO-ANSWER ENGINE ────────────────────────────────────────────────
+// v3.5.8: the first sentence of a transcript line, terminator included.
+function firstSentence(text) {
+  const m = String(text).match(/^[^.!?]+[.!?]?/);
+  return (m ? m[0] : String(text)).trim();
+}
+
 function isQuestion(line) {
   if (!line) return false;
-  const clean = line.trim().toLowerCase();
-  
-  // Ignore very short phrases or single words (e.g. "what?", "who is it?")
-  if (clean.length < 15) return false;
-
-  // Ends with question mark
-  if (clean.endsWith('?')) return true;
-
-  // Common English question words/patterns as prefixes
+  // v3.5.8: judge ONLY the first sentence of the segment. Whisper
+  // segments bundle several sentences, and the old any-position checks
+  // fired the copilot on ordinary statements — a "?" buried mid-segment,
+  // or a fragment starting with an auxiliary verb ("Are going to be…",
+  // "Is why some of your…"), produced 7 auto-answers in ~100 s of
+  // monologue. Bare auxiliaries now count only with a trailing "?".
+  const s = firstSentence(line);
+  if (s.length < 10) return false;
+  if (s.endsWith('?')) return true;
+  const clean = s.toLowerCase();
   const starters = [
     'what', 'why', 'how', 'who', 'where', 'when', 'which', 'whom', 'whose',
-    'is ', 'are ', 'can ', 'could ', 'should ', 'would ', 'do ', 'does ', 'did ',
-    'was ', 'were ', 'will ', 'has ', 'have ', 'had ', 'explain ', 'write a ',
-    'implement ', 'how to ', 'what is ', 'is there ', 'can you ', 'could you '
+    'can you', 'could you', 'can i', 'could i',
+    'explain', 'write a', 'write an', 'implement', 'tell me',
   ];
-
-  for (const starter of starters) {
-    if (clean.startsWith(starter)) {
-      return true;
-    }
-  }
-
-  // Common keywords mid-sentence indicating an explicit query
-  if (clean.includes('?') || clean.includes('explain how') || clean.includes('tell me how') || clean.includes('difference between')) {
-    return true;
-  }
-
-  return false;
+  return starters.some(w => clean.startsWith(w));
 }
 
 function isDuplicateQuestion(line) {
@@ -985,12 +1020,25 @@ async function askCopilotAI(question) {
 function processTranscriptLine(line) {
   if (!line || line.trim().length === 0) return;
   const isCopilotEnabled = state.settings.copilotAutoAnswer !== undefined ? state.settings.copilotAutoAnswer : true;
-  if (isCopilotEnabled && isQuestion(line) && !isDuplicateQuestion(line)) {
-    state.lastSolvedQuestions.push({ text: line, time: Date.now() });
-    if (state.lastSolvedQuestions.length > 5) {
-      state.lastSolvedQuestions.shift();
+  if (!isCopilotEnabled) return;
+  // v3.5.7: transcript lines arrive as "[Them] …" / "[You] …" — the
+  // speaker prefix silently defeated every question-starter check in
+  // isQuestion ("[them] what is…" never starts with "what"), so
+  // auto-answer only fired when a segment happened to end in "?".
+  // Detect on the clean text, and ask with the clean text.
+  const clean = line.replace(/^\[(You|Them)\]\s*/, '');
+  if (isQuestion(clean)) {
+    // v3.5.8: ask with the first sentence only — the question that
+    // triggered detection — not the whole multi-sentence segment.
+    const q = firstSentence(clean);
+    if (!isDuplicateQuestion(q)) {
+      state.lastSolvedQuestions.push({ text: q, time: Date.now() });
+      if (state.lastSolvedQuestions.length > 5) {
+        state.lastSolvedQuestions.shift();
+      }
+      alog(`copilot: auto-answering: ${q.slice(0, 120)}`);
+      askCopilotAI(q);
     }
-    askCopilotAI(line);
   }
 }
 
@@ -1043,25 +1091,63 @@ window.ghostmind.on('snipe-captured', ({ b64 }) => {
     switchTab('chat');
     return;
   }
-  state.snipeImage = b64;
-  showSnipeTray(b64);
+  // v3.5: snipes queue up — capture several, then send one batch (or a
+  // single one) to Claude with one prompt.
+  state.snipeImages.push(b64);
+  renderSnipeTray();
   switchTab('chat');
 });
 
-function showSnipeTray(b64) {
-  const tray = document.getElementById('snipe-tray');
-  document.getElementById('snipe-thumb').src = `data:image/png;base64,${b64}`;
-  tray.classList.add('visible');
-  document.getElementById('snipe-custom-prompt').value = '';
+function renderSnipeTray() {
+  const tray  = document.getElementById('snipe-tray');
+  const wrap  = document.getElementById('snipe-thumbs');
+  const count = document.getElementById('snipe-count');
+  wrap.innerHTML = '';
+  state.snipeImages.forEach((b64, i) => {
+    const item = document.createElement('div');
+    item.className = 'snipe-thumb-wrap';
+    const img = document.createElement('img');
+    img.src = `data:image/png;base64,${b64}`;
+    img.alt = `snapshot ${i + 1}`;
+    img.addEventListener('click', () => {
+      const win = window.open('', '_blank', 'width=900,height=600');
+      win.document.write(`<body style="margin:0;background:#000"><img src="${img.src}" style="max-width:100%;max-height:100vh;display:block;margin:auto;"></body>`);
+    });
+    const x = document.createElement('button');
+    x.className = 'snipe-x';
+    x.textContent = '×';
+    x.title = 'Remove this snapshot';
+    x.addEventListener('click', () => { state.snipeImages.splice(i, 1); renderSnipeTray(); });
+    item.appendChild(img);
+    item.appendChild(x);
+    wrap.appendChild(item);
+  });
+  const n = state.snipeImages.length;
+  count.textContent = n === 0 ? '' : (n === 1 ? '1 snapshot — or ＋ Add more' : `${n} snapshots — sent together`);
+  document.getElementById('snipe-custom-prompt').placeholder =
+    n > 1 ? 'Custom question about these snapshots...' : 'Custom question about this...';
+  tray.classList.toggle('visible', n > 0);
 }
 
-document.getElementById('snipe-dismiss').addEventListener('click', () => {
-  document.getElementById('snipe-tray').classList.remove('visible');
-  state.snipeImage = null;
+function clearSnipeQueue() {
+  state.snipeImages = [];
+  renderSnipeTray();
+}
+
+document.getElementById('snipe-dismiss').addEventListener('click', clearSnipeQueue);
+
+document.getElementById('snipe-add').addEventListener('click', () => {
+  window.ghostmind.triggerSnipe();
 });
 
 document.getElementById('snipe-solve').addEventListener('click', () => {
-  runSnipe('Analyze this screenshot carefully. If it contains a coding problem, algorithm challenge, or technical assessment — solve it completely with working, well-commented code. Explain your approach step by step.');
+  // Code Only mode: don't even ask for comments/explanation (the system
+  // prompt override would win anyway, but don't fight it).
+  if (state.settings.codeOnlyMode) {
+    runSnipe('Solve the coding problem in this screenshot completely with working code.');
+  } else {
+    runSnipe('Analyze this screenshot carefully. If it contains a coding problem, algorithm challenge, or technical assessment — solve it completely with working, well-commented code. Explain your approach step by step.');
+  }
 });
 document.getElementById('snipe-explain').addEventListener('click', () => {
   runSnipe('Explain everything visible in this screenshot in detail. Break down any code, UI elements, diagrams, or text you see.');
@@ -1078,19 +1164,22 @@ document.getElementById('snipe-ask').addEventListener('click', () => {
 });
 
 function runSnipe(prompt) {
-  if (!state.snipeImage) return;
-  const img = state.snipeImage;
-  document.getElementById('snipe-tray').classList.remove('visible');
-  state.snipeImage = null;
-  askAI(prompt, img);
+  if (state.snipeImages.length === 0) return;
+  const imgs = state.snipeImages.slice();
+  clearSnipeQueue();
+  document.getElementById('snipe-custom-prompt').value = '';
+  // v3.5.4: batch snipes are usually fragments of ONE thing — a question
+  // and its options, a problem and its code, a screen and its continuation
+  // after scrolling, an error and what caused it. The old "(attached N
+  // snapshots — consider all of them)" left the model to answer each one
+  // separately. This note makes it reconcile first: one unified answer
+  // when the snapshots belong together; separate answers only when they
+  // are clearly unrelated.
+  const batchNote = imgs.length > 1
+    ? ` (I have attached ${imgs.length} snapshots, in the order I captured them. Before answering, work out how they relate: snapshots captured together are usually parts of ONE thing — a question and its options, a problem statement and its code, a screen and its continuation after scrolling, an error and the code that caused it. If they belong together, reconcile them into ONE unified answer: merge overlapping or continuing content, do not repeat yourself, and do not answer them one by one. Only if they are clearly unrelated, answer each one briefly and separately, and say they are unrelated.)`
+    : '';
+  askAI(prompt + batchNote, imgs);
 }
-
-// Zoom snipe thumbnail on click
-document.getElementById('snipe-thumb').addEventListener('click', () => {
-  const src = document.getElementById('snipe-thumb').src;
-  const win = window.open('', '_blank', 'width=900,height=600');
-  win.document.write(`<body style="margin:0;background:#000"><img src="${src}" style="max-width:100%;max-height:100vh;display:block;margin:auto;"></body>`);
-});
 
 // ─── MIC DICTATION (chat input, via the local pipeline) ─────────────────────
 // The mic button turns on dictationMode and makes sure local capture is
@@ -1122,6 +1211,60 @@ micBtn.addEventListener('click', async () => {
 // Track "them" = BlackHole / Loopback device carrying the call
 // Devices are enumerated here — Electron can pick an exact device,
 // which is the whole reason the Chrome Helper could be deleted.
+// v3.5.5: device-id resolution, shared by the Settings pickers, the
+// setup wizard and capture start. 'default' is Chromium's pseudo-device
+// for the system default input — in practice always the microphone. It
+// must never drive the Them track: both tracks then record the mic, the
+// user's own voice comes back labelled [Them], and the echo guard hides
+// the [You] copy. A saved Them id that is a placeholder, stale (device
+// gone), or identical to the You device is treated as unset and resolved
+// to a BlackHole/Loopback device when one exists. Explicit real choices
+// are always respected. (Function declarations, so boot order is safe.)
+function isCallDevice(d) { return /blackhole|loopback/i.test((d && d.label) || ''); }
+function isPlaceholderId(id) { return !id || id === 'default'; }
+
+// v3.5.6 diagnostics: append device facts to userData/audio-debug.log
+// (via main) so audio problems can be diagnosed from the file — the
+// app's window deliberately can't be inspected from outside.
+function alog(msg) {
+  try { window.ghostmind.audioDebug?.(`[${new Date().toISOString()}] ${msg}`); } catch (_) {}
+}
+function fmtInputs(inputs) {
+  return inputs.map(d => `${d.label || '(no label)'}#${String(d.deviceId || '').slice(0, 8)}`).join(' | ');
+}
+
+function resolveYouDeviceId(inputs, savedYou, themId) {
+  if (!isPlaceholderId(savedYou) && savedYou !== themId &&
+      inputs.some(d => d.deviceId === savedYou)) return savedYou;
+  // Prefer the physical device the 'default' pseudo-device stands for:
+  // Chromium labels it "Default - <real label>" (hyphen or em dash).
+  // This keeps You on the system default mic even when a sleeping
+  // Continuity/iPhone mic happens to enumerate first.
+  const def = inputs.find(d => d.deviceId === 'default');
+  if (def && def.label) {
+    const m = /^Default\s*[-—–]\s*(.+)$/.exec(def.label);
+    if (m) {
+      const hit = inputs.find(d => d.deviceId !== 'default' && !isCallDevice(d) && (d.label || '') === m[1]);
+      if (hit && hit.deviceId !== themId) return hit.deviceId;
+    }
+  }
+  const builtin = inputs.find(d => !isCallDevice(d) && d.deviceId !== 'default' && /macbook|built[- ]?in/i.test(d.label || ''));
+  if (builtin && builtin.deviceId !== themId) return builtin.deviceId;
+  const real = inputs.find(d => !isCallDevice(d) && d.deviceId !== 'default');
+  if (real) return real.deviceId;
+  const any = inputs.find(d => !isCallDevice(d));
+  return any ? any.deviceId : '';
+}
+
+function resolveThemDeviceId(inputs, savedThem, youId) {
+  if (!isPlaceholderId(savedThem) && savedThem !== youId &&
+      inputs.some(d => d.deviceId === savedThem)) return savedThem;
+  const call = inputs.find(isCallDevice);
+  return call ? call.deviceId : '';
+}
+
+let _noCallDeviceAdvised = false;
+
 async function populateAudioDevices() {
   try {
     // A throwaway getUserMedia call unlocks device labels.
@@ -1130,10 +1273,13 @@ async function populateAudioDevices() {
       tmp.getTracks().forEach(t => t.stop());
     } catch (_) {}
     const inputs = await LocalCapture.listAudioInputs();
-    const fill = (selectId, savedId, prefer) => {
+    const beforeYou = state.settings.youDeviceId, beforeThem = state.settings.themDeviceId;
+    const youId  = resolveYouDeviceId(inputs, state.settings.youDeviceId, state.settings.themDeviceId);
+    const themId = resolveThemDeviceId(inputs, state.settings.themDeviceId, youId);
+    alog(`populate: inputs=[${fmtInputs(inputs)}] savedYou=${beforeYou || ''} savedThem=${beforeThem || ''} -> you=${youId || ''} them=${themId || ''}`);
+    const fill = (selectId, resolvedId) => {
       const sel = document.getElementById(selectId);
       if (!sel) return;
-      const current = savedId || sel.value;
       sel.innerHTML = '<option value="">— not set —</option>';
       inputs.forEach(d => {
         const o = document.createElement('option');
@@ -1141,30 +1287,92 @@ async function populateAudioDevices() {
         o.textContent = d.label || d.deviceId;
         sel.appendChild(o);
       });
-      if (current && inputs.some(d => d.deviceId === current)) sel.value = current;
-      else if (prefer) {
-        const hit = inputs.find(prefer);
-        if (hit) sel.value = hit.deviceId;
-      }
+      sel.value = resolvedId || '';
     };
-    const isCall = d => /blackhole|loopback/i.test(d.label || '');
-    fill('s-them-device', state.settings.themDeviceId, isCall);
-    fill('s-you-device', state.settings.youDeviceId, d => !isCall(d));
-    // Persist the auto-picks so main/renderer agree on first run.
-    const youSel = document.getElementById('s-you-device');
-    const themSel = document.getElementById('s-them-device');
-    if (youSel && !state.settings.youDeviceId)  state.settings.youDeviceId  = youSel.value;
-    if (themSel && !state.settings.themDeviceId) state.settings.themDeviceId = themSel.value;
+    fill('s-you-device', youId);
+    fill('s-them-device', themId);
+    // Persist the resolved picks — this also repairs placeholder or
+    // colliding saved ids the first time the panel is populated.
+    if (youId)  state.settings.youDeviceId  = youId;
+    if (themId) state.settings.themDeviceId = themId;
+    // v3.5.6: persist a repair to disk too, so the saved config matches
+    // what capture will use (previously only capture start persisted).
+    if ((youId && youId !== beforeYou) || (themId && themId !== beforeThem)) {
+      try {
+        const current = (await window.ghostmind.getSettings()) || {};
+        await window.ghostmind.saveSettings({ ...current, ...state.settings });
+        alog('populate: persisted repaired device ids to settings');
+      } catch (_) {}
+    }
     updatePills();
   } catch (e) {
     console.log('Could not enumerate audio devices:', e);
   }
 }
 
+// v3.5.8: pre-warm the local transcription engine at launch. The
+// Whisper model loads on the sidecar's first transcribe request, which
+// used to be the first speech segment after Start Listening — the
+// multi-second wait before the first transcript line appeared. One
+// second of silence through the normal path loads it in the
+// background instead. Fire-and-forget: a failure is logged, and Start
+// Listening simply loads on first use as before.
+let _prewarmed = false;
+async function prewarmTranscription() {
+  if (_prewarmed) return;
+  if ((state.settings.transcriptionMethod || 'local') !== 'local') return;
+  _prewarmed = true;
+  try {
+    const t0 = Date.now();
+    await window.ghostmind.startLocalTranscription();
+    const silence = float32ToWavBase64(new Float32Array(16000), 16000);
+    await window.ghostmind.transcribeLocalSegment({ wavBase64: silence, speaker: 'you', startMs: 0, partial: false });
+    alog(`warmup: Whisper engine warm in ${Date.now() - t0}ms`);
+  } catch (e) {
+    alog(`warmup: failed (${e.message}) — engine will load on first use instead`);
+  }
+}
+
 async function ensureLocalCapture() {
   if (state.localCapture) return true;
-  const youDeviceId  = state.settings.youDeviceId  || document.getElementById('s-you-device')?.value || '';
-  const themDeviceId = state.settings.themDeviceId || document.getElementById('s-them-device')?.value || '';
+  let youDeviceId  = state.settings.youDeviceId  || document.getElementById('s-you-device')?.value || '';
+  let themDeviceId = state.settings.themDeviceId || document.getElementById('s-them-device')?.value || '';
+  alog(`ensure: start you=${youDeviceId} them=${themDeviceId}`);
+  // v3.5.5: resolve the saved ids against the devices that exist right
+  // now. This repairs the classic misconfiguration — both tracks left on
+  // 'default' (the microphone) — before it can label the user's own
+  // voice as [Them], and advises once when no call-audio device exists.
+  try {
+    try {
+      const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+      tmp.getTracks().forEach(t => t.stop());
+    } catch (_) {}
+    const inputs = await LocalCapture.listAudioInputs();
+    if (inputs.length) {
+      const rYou  = resolveYouDeviceId(inputs, youDeviceId, themDeviceId);
+      const rThem = resolveThemDeviceId(inputs, themDeviceId, rYou);
+      alog(`ensure: inputs=[${fmtInputs(inputs)}] -> rYou=${rYou || ''} rThem=${rThem || ''}`);
+      if (rYou) youDeviceId = rYou;
+      if (rThem && rThem !== themDeviceId) {
+        const label = inputs.find(d => d.deviceId === rThem)?.label || rThem;
+        addMsg('system', `🎧 Call audio fixed: now using “${label}” for the other person's voice (it was set to your microphone, which labels your own voice as [Them]).`);
+        themDeviceId = rThem;
+      }
+      if (!rThem && !_noCallDeviceAdvised) {
+        _noCallDeviceAdvised = true;
+        addMsg('system', 'ℹ No call-audio device (BlackHole/Loopback) found — only your side of calls will be transcribed. Install BlackHole (free) and route the call through it; GhostMind will then pick it up automatically.');
+      }
+      // Remember the repaired ids so the fix sticks.
+      if (youDeviceId !== state.settings.youDeviceId || themDeviceId !== state.settings.themDeviceId) {
+        state.settings.youDeviceId = youDeviceId;
+        state.settings.themDeviceId = themDeviceId;
+        try {
+          const current = (await window.ghostmind.getSettings()) || {};
+          await window.ghostmind.saveSettings({ ...current, ...state.settings });
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
   if (!youDeviceId && !themDeviceId) {
     addMsg('system', '⚠ No audio devices selected — pick your mic and your BlackHole/Loopback device in Settings first.');
     return false;
@@ -1173,6 +1381,10 @@ async function ensureLocalCapture() {
     await window.ghostmind.startLocalTranscription();
     const capture = new LocalCapture({
       sendSegment: (seg) => window.ghostmind.transcribeLocalSegment(seg),
+      onTrackError: (speaker, e) => {
+        alog(`track ${speaker} failed to start: ${e.name}: ${e.message}`);
+        addMsg('system', `⚠ The ${speaker === 'you' ? 'microphone' : 'call-audio'} track failed to start (${e.name}). ${speaker === 'you' ? 'Your side will not be transcribed.' : 'Only your side will be transcribed.'}`);
+      },
       onStream: (stream, speaker) => {
         if (speaker !== 'them') return;
         try {
@@ -1200,6 +1412,7 @@ async function ensureLocalCapture() {
     addMsg('system', '🎙 Local transcription started (on-device Whisper, nothing leaves this Mac)');
     return true;
   } catch (e) {
+    alog(`ensure: capture.start failed: ${e.name}: ${e.message}`);
     addMsg('system', `✗ Could not start local transcription: ${e.message}. Is the sidecar installed? See README → Installation.`);
     return false;
   }
@@ -1221,6 +1434,7 @@ async function stopLocalCapture() {
   setStatus('ready');
   addMsg('system', '⏹ Local transcription stopped');
   generatePostCall();
+  pushAutoDraft();
 }
 
 function drawWaveform(analyser, canvasId) {
@@ -1414,6 +1628,27 @@ document.getElementById('clipboard-dismiss').addEventListener('click', () => {
   document.getElementById('clipboard-toast').classList.remove('visible');
 });
 
+// ─── AUTO-SAVE (v3.5.3) ───────────────────────────────────────────────────────
+// The live conversation exists only in memory until the user presses Save
+// Session — quitting used to lose it entirely. Now the renderer keeps a
+// locally-composed draft summary (no API call) and pushes it to main after
+// each exchange and at the end of a call; main writes it to the session
+// store synchronously on will-quit. A manual Save Session clears the draft
+// so the same conversation is never stored twice.
+function pushAutoDraft() {
+  try {
+    const msgs = state.messages.filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
+    if (msgs.length < 2 && state.transcript.length === 0) return;
+    const first = msgs.find(m => m.role === 'user');
+    const last = msgs[msgs.length - 1];
+    let s = `Auto-saved chat (${msgs.length} messages).`;
+    if (first) s += ` Opened with: "${first.content.slice(0, 120)}"`;
+    if (last && last !== first) s += ` Latest: "${last.content.slice(0, 120)}"`;
+    if (state.transcript.length > 0) s += ` Call transcript: ${state.transcript.length} lines.`;
+    window.ghostmind.updateSessionDraft(s);
+  } catch (_) {}
+}
+
 // ─── SESSION MEMORY ───────────────────────────────────────────────────────────
 document.getElementById('save-session-btn').addEventListener('click', async () => {
   if (state.messages.length < 2) { addMsg('system', 'No conversation to save yet'); return; }
@@ -1427,6 +1662,7 @@ document.getElementById('save-session-btn').addEventListener('click', async () =
     });
     const summary = data.content?.[0]?.text || 'Session recorded';
     await window.ghostmind.saveSession({ summary });
+    window.ghostmind.clearSessionDraft();
     state.sessions = await window.ghostmind.getSessions();
     renderMemory(state.sessions);
     addMsg('system', '✓ Session saved to memory');

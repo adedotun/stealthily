@@ -38,9 +38,12 @@ class LocalCapture {
   // sendSegment: ({wavBase64, speaker, startMs}) => Promise<any>
   // onStream (optional): (stream, speaker) => void — lets the UI wire a
   // waveform analyser to a track without the capture layer knowing why.
-  constructor({ sendSegment, onStream }) {
+  constructor({ sendSegment, onStream, onTrackError }) {
     this.sendSegment = sendSegment;
     this.onStream = onStream || null;
+    // v3.5.6: per-track start failures are reported instead of taking
+    // the whole capture down (or worse, failing silently).
+    this.onTrackError = onTrackError || null;
     this.tracks = [];
   }
 
@@ -94,8 +97,22 @@ class LocalCapture {
   }
 
   async start({ youDeviceId, themDeviceId }) {
-    if (youDeviceId)  await this.startTrack({ deviceId: youDeviceId,  speaker: 'you' });
-    if (themDeviceId) await this.startTrack({ deviceId: themDeviceId, speaker: 'them' });
+    // v3.5.6: start each track independently. Before this, one failing
+    // track (e.g. an unplugged call-audio device) rejected the whole
+    // start and could leave the session with no transcription at all.
+    const wanted = [];
+    if (youDeviceId)  wanted.push({ deviceId: youDeviceId,  speaker: 'you' });
+    if (themDeviceId) wanted.push({ deviceId: themDeviceId, speaker: 'them' });
+    let started = 0;
+    let firstError = null;
+    for (const t of wanted) {
+      try { await this.startTrack(t); started++; }
+      catch (e) {
+        if (!firstError) firstError = e;
+        if (this.onTrackError) { try { this.onTrackError(t.speaker, e); } catch (_) {} }
+      }
+    }
+    if (!started && firstError) throw firstError;
   }
 
   stop() {

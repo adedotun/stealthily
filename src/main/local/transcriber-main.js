@@ -26,6 +26,9 @@ class LocalTranscriber {
     this.nextId = 1;
     this.pending = new Map();
     this.queue = Promise.resolve();                   // serial: one segment at a time
+    this._stopping = false;                           // v3.5: intentional stop() vs crash
+    this._slowTimer = null;                           // v3.5: first-result watchdog
+    this._everResult = false;                         // v3.5: any sidecar reply yet, ever
   }
 
   start() {
@@ -39,11 +42,20 @@ class LocalTranscriber {
     this.proc = this.command
       ? spawn(this.command, [], { env, stdio: ['pipe', 'pipe', 'pipe'] })
       : spawn(pythonPath, [this.sidecarPath], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    this._stopping = false;
     const rl = readline.createInterface({ input: this.proc.stdout });
     rl.on('line', (line) => {
       let msg; try { msg = JSON.parse(line); } catch { return; }
+      this._everResult = true;
+      if (this._slowTimer) { clearTimeout(this._slowTimer); this._slowTimer = null; }
       const settle = this.pending.get(msg.id);
       if (settle) { this.pending.delete(msg.id); settle(msg); }
+      // v3.5: NEVER swallow an engine error again. Before this, a failed
+      // segment simply never produced a transcript line and the user saw
+      // a healthy-looking "CAPTURING" bar with permanent silence.
+      if (msg.error) {
+        this.sendToRenderer('transcription-error', { error: String(msg.error) });
+      }
       if (msg.text) {
         const label = msg.speaker === 'you' ? 'You' : 'Them';
         this.sendToRenderer('external-transcript', {
@@ -55,15 +67,24 @@ class LocalTranscriber {
     });
     this.proc.stderr.on('data', d => console.error('[transcriber]', d.toString().trim()));
     this.proc.on('exit', () => {
+      const intentional = this._stopping;
       this.proc = null;
+      if (this._slowTimer) { clearTimeout(this._slowTimer); this._slowTimer = null; }
       for (const settle of this.pending.values()) settle({ error: 'sidecar exited' });
       this.pending.clear();
+      // v3.5: an unexpected exit is a user-visible failure, not silence —
+      // the next segment restarts the engine automatically.
+      if (!intentional) {
+        this.sendToRenderer('transcription-error', { error: 'The transcription engine stopped unexpectedly. It will restart automatically on the next speech segment.' });
+      }
       this.sendToRenderer('external-state', { active: false });
     });
     this.sendToRenderer('external-state', { active: true });
   }
 
   stop() {
+    this._stopping = true;
+    if (this._slowTimer) { clearTimeout(this._slowTimer); this._slowTimer = null; }
     if (this.proc) { this.proc.stdin.end(); this.proc.kill(); this.proc = null; }
     this.sendToRenderer('external-state', { active: false });
   }
@@ -74,6 +95,18 @@ class LocalTranscriber {
   // replaces it. Returns a promise for the sidecar's JSON result.
   transcribe(wavBase64, speaker, startMs, partial = false) {
     if (!this.proc) this.start();
+    // v3.5: first-result watchdog — the first-ever transcribe call is
+    // where the Whisper model downloads (~150 MB for base.en) and loads.
+    // If 25 s pass with no reply at all, say so in the UI instead of
+    // letting "Listening" look silently broken.
+    if (!this._everResult && !this._slowTimer) {
+      this._slowTimer = setTimeout(() => {
+        this._slowTimer = null;
+        this.sendToRenderer('transcription-notice', {
+          text: 'Still loading the speech model — on the very first run it downloads once (~150 MB), then transcription begins. If this persists for several minutes, the download may be blocked.',
+        });
+      }, 25000);
+    }
     const run = () => new Promise((resolve) => {
       const id = this.nextId++;
       this.pending.set(id, resolve);

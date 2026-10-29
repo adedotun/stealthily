@@ -3,8 +3,10 @@
     "appId": "com.ghostmind.app",
     "artifactName": "GhostMind.${ext}",
     "asarUnpack": [
-      "sidecar/bin/**"
+      "sidecar/bin/**",
+      "node_modules/secure-input/**"
     ],
+    "npmRebuild": false,
     "publish": [
       {
         "provider": "github",
@@ -27,7 +29,8 @@
       "sidecar/transcribe_sidecar.py",
       "sidecar/requirements.txt",
       "sidecar/bin/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/secure-input/**"
     ],
     "mac": {
       "category": "public.app-category.productivity",
@@ -52,7 +55,8 @@
     }
   },
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "secure-input": "file:native/secure-input"
   },
   "description": "Stealth AI assistant — invisible to all screen capture, with on-device call transcription",
   "devDependencies": {
@@ -73,5 +77,5 @@
     "test": "playwright test",
     "test:local": "node --test tests-local/*.test.js"
   },
-  "version": "3.4.0"
+  "version": "3.5.10"
 }
