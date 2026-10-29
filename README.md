@@ -1,4 +1,4 @@
-# 👻 GhostMind v3.4 — Native Electron App
+# 👻 GhostMind v3.5 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
@@ -9,6 +9,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.2:** live-feeling transcription (provisional words appear while someone is still speaking) and a real database memory — see [What changed in v3.2](#what-changed-in-v32).
 **v3.3:** speed — chat answers now stream in token by token, the models' built-in "thinking" pause is off by default, and the default system prompt was rewritten for a glance-and-go copilot — see [What changed in v3.3](#what-changed-in-v33).
 **v3.4:** trust + polish — the app now verifies itself (truthful AI status, live model list, one-tap health check), transcription got smarter (Silero filtering, pre-roll, echo guard), and the call experience gained compact mode, live suggestion chips, session export, and ask-my-past-sessions — see [What changed in v3.4](#what-changed-in-v34).
+**v3.5:** fixes from the first real-world test pass — multi-snapshot snipes (queue several captures, send them together), a dead Settings toggle repaired, and transcription that can no longer fail silently: engine errors surface in the chat, the Silero filter fails safe, and a slow first-run model download says so — see [What changed in v3.5](#what-changed-in-v35).
 
 ---
 
@@ -16,109 +17,123 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 
 **[Download GhostMind for Mac (.dmg)](https://github.com/adedotun/stealthily/releases/latest/download/GhostMind.dmg)** — this link always serves the latest stable release. ([.zip version](https://github.com/adedotun/stealthily/releases/latest/download/GhostMind.zip) if you prefer.)
 
-- macOS on Apple Silicon. The link goes live once the first release is published on the [Releases page](https://github.com/adedotun/stealthily/releases) — until then it returns a 404.
-- The app isn't code-signed yet, so on first launch macOS will warn about an unidentified developer: **right-click the app → Open**.
-- You'll need your own free [Anthropic API key](https://console.anthropic.com) (the setup wizard walks you through it), and for call transcription, the free BlackHole driver — the Installation Guide below covers both.
-- Building from source instead? Follow the Installation Guide below.
+- macOS on Apple Silicon.
+- The app is signed but not yet notarized with Apple, so macOS blocks the first launch with an "unidentified developer" warning — there's a one-time, 30-second way through it in **Step 2** of the guide below.
+- You'll need your own [Anthropic API key](https://console.anthropic.com) for the AI answers (the guide shows you how to get one), and — only if you want to hear the other side of calls — the free BlackHole driver. Both are covered step by step below.
+- Building from source instead? See **Part D** of the guide.
 
 ## Installation Guide
 
-Everything GhostMind needs, in the order to install it. macOS is the primary target; Windows notes are inline.
+Welcome — let's get you set up. There are two ways in:
 
-### 1. Prerequisites
+- **Just want to use GhostMind?** Follow **Part A** (about five minutes). If you also want it to hear the *other side* of your calls, do **Part B** as well (about ten more minutes, one restart).
+- **Building from source?** Skip to **Part D**.
 
-| Requirement | Version | Check | Get it |
-|---|---|---|---|
-| Node.js | 20+ (18 works, 20 recommended) | `node -v` | nodejs.org or `brew install node` |
-| Python | 3.12–3.14 (not 3.15 — no ctranslate2 wheels yet) | `python3 --version` | python.org or `brew install python@3.14` |
-| Anthropic API key | — | — | console.anthropic.com |
-| BlackHole 2ch (macOS, for call audio) | any recent | Audio MIDI Setup → look for “BlackHole 2ch” | `brew install blackhole-2ch`, then **restart your Mac** |
-| VB-Cable (Windows, equivalent) | any | Sound settings → look for “CABLE Input” | vb-audio.com/Cable |
+You don't need to be technical. Every step says what you'll see and how you'll know it worked. The only things you'll need along the way:
 
-> The Anthropic key is the only cloud credential left. Transcription needs **no** API key and **no** OpenAI account any more.
+- A Mac with Apple Silicon (M1 or later).
+- Your own **Anthropic API key** for the AI answers (Step A3 shows you how to get one — it takes two minutes, and usage is pay-as-you-go; a typical call's worth of answers costs a few cents). Transcription itself is free and runs entirely on your Mac.
 
-### 2. Install the app dependencies
+### Part A — Install the app
 
-```bash
-git clone <this repo> ghostmind && cd ghostmind   # or unzip the source
-npm install
-```
+**Step 1: Download and install.**
+Download the `.dmg` from the link above, open it, and drag **GhostMind** into the **Applications** folder. That's the whole install — the transcription engine is built into the app, so there's no Python or anything else to set up.
 
-### 3. Install the transcription sidecar (one time)
+**Step 2: The first launch (macOS will grumble once — this is normal).**
+Double-click GhostMind in Applications. Because the app isn't yet notarized with Apple, macOS will refuse with a message like *"GhostMind was blocked to protect your Mac"* or *"unidentified developer"*. This happens once, and here's the way through:
 
-GhostMind transcribes with a small Python sidecar running Whisper locally. Create its virtual environment — GhostMind finds it automatically at `sidecar/.venv`:
+1. Open **System Settings → Privacy & Security**.
+2. Scroll down — you'll see a line saying GhostMind was blocked, with an **Open Anyway** button. Click it.
+3. Confirm **Open** on the dialog that follows.
 
-```bash
-npm run setup:sidecar
-# which is: python3 -m venv sidecar/.venv && sidecar/.venv/bin/pip install -r sidecar/requirements.txt
-```
+GhostMind opens, and macOS never asks again. *(Terminal-comfortable alternative: `xattr -cr /Applications/GhostMind.app`, then launch normally.)*
 
-This installs **faster-whisper**. On Apple Silicon you may use **mlx-whisper** instead for native performance: edit `sidecar/requirements.txt` (swap the two engine lines) before running the command above.
+**Step 3: The setup wizard — your API key.**
+GhostMind opens a short setup wizard the first time it runs.
 
-The Whisper **model downloads once, on first transcription** (~75MB for `tiny.en`, ~150MB for `base.en` (default), ~500MB for `small.en`), then everything works fully offline. Pick the model in Settings.
+1. **Get a key:** go to [console.anthropic.com](https://console.anthropic.com), sign up or sign in, open **API Keys**, click **Create Key**, give it any name, and copy the key (it starts with `sk-ant-`). You'll need a little credit on the account for the key to work — Anthropic's billing page handles that.
+2. **Paste it into the wizard** and continue. Your key is stored **encrypted on this Mac** (in the macOS Keychain's secure storage) — it is never sent anywhere except to Anthropic when you ask a question.
+3. **Microphone:** when macOS asks whether GhostMind may use the microphone, click **Allow**. No mic permission, no transcription — the app can't hear you without it.
+4. **Devices:** the wizard asks which microphone is *you*. Pick your usual mic (for most people, "MacBook Pro Microphone"). The *Them* (call audio) side is Part B — if you're not setting that up yet, just continue; GhostMind works fine hearing only you.
 
-### 4. Set up call-audio routing (macOS — the BlackHole step)
+**You'll know it worked when** the little pill in the app's top bar turns green and says the AI is connected, and asking a question in the chat gets you an answer.
 
-BlackHole alone gives you a one-way street: the call can be sent *to* it, but then you can't hear the call. The fix is a Multi-Output Device:
+**Step 4: One more permission, the first time you take a screenshot (Snipe).**
+GhostMind's screenshot feature (Cmd+Shift+S) needs macOS's **Screen & System Audio Recording** permission. The first time you snipe, macOS will prompt you; if it doesn't take effect right away:
 
-1. Open **Audio MIDI Setup** (Spotlight).
-2. Bottom-left **+ → Create Multi-Output Device**.
-3. Tick **your headphones/speakers first**, then **BlackHole 2ch**. Set the headphones as the Primary/Clock Source and tick **Drift Correction** for BlackHole.
-4. Rename it `Call + Hear`.
-5. In Zoom/Meet/Teams: **Speaker = `Call + Hear`**, **Microphone = your real mic** (never the Loopback/BlackHole device — that echoes the call back to everyone).
+1. **System Settings → Privacy & Security → Screen & System Audio Recording** — turn **GhostMind** on.
+2. **Quit GhostMind completely and reopen it.** macOS insists on the restart for this one permission; after that, Snipe just works.
 
-On Windows: set the call app's speaker to your headphones and use VB-Cable / Stereo Mix as the “Them” device in GhostMind Settings; the same principle applies.
+**Step 5: Give the first launch a moment.**
+The first time GhostMind starts, it quietly downloads its speech model (about 150 MB) in the background. On a decent connection that's under a minute; on a slow one, a few minutes. It happens **once, ever** — after that, transcription starts in seconds and works completely offline.
 
-### 5. Grant macOS permissions
+### Part B — Hear the other side of the call (BlackHole)
 
-System Settings → Privacy & Security:
+Here's the thing: macOS doesn't let any app record what the *other person* on a call is saying — apps can only hear your microphone. The workaround is a free, open-source virtual audio cable called **BlackHole**. You route the call's sound through it, GhostMind listens to the cable, and you still hear everything exactly as before. It's a one-time setup.
 
-- **Microphone** → enable GhostMind (in dev mode: **Electron**)
-- **Screen & System Audio Recording** → enable GhostMind (dev: **Electron**) — required for Snipe screenshots
+**Step 1: Install BlackHole, then restart your Mac.**
 
-Restart the app after granting.
+- **Easiest:** go to [existential.audio/blackhole](https://existential.audio/blackhole), enter your email to get the download, choose **BlackHole 2ch**, and run the installer (it will ask for your Mac password — that's the audio driver being installed).
+- **Or, with Homebrew:** `brew install --cask blackhole-2ch`
+- **Then restart your Mac.** The driver only loads after a restart; skipping this is the #1 reason "BlackHole isn't showing up" for people.
 
-### 6. First run
+**Step 2: Build the "Call + Hear" output (two minutes, in Audio MIDI Setup).**
+BlackHole alone is a one-way street — sound sent to it is sound *you* can't hear. The fix is a combined output that sends sound to your ears **and** to BlackHole at the same time:
 
-```bash
-npm run dev          # development
-# or after building (step 8): install the .dmg
-```
+1. Open **Audio MIDI Setup** (press Cmd+Space, type "Audio MIDI", hit Enter).
+2. Bottom-left corner: click **+** → **Create Multi-Output Device**.
+3. In the list on the right, tick **your speakers or headphones first**, then tick **BlackHole 2ch**. (Your speakers first means they stay the clock source — sound stays in sync. Tick **Drift Correction** for BlackHole.)
+4. Right-click the new device and **rename it `Call + Hear`** so you can spot it later.
 
-1. Launch GhostMind — it appears bottom-right, floating above everything.
-2. `Cmd+Shift+G` toggles visibility.
-3. **Settings tab** → paste your Anthropic API key → pick your **You** device (your mic) and **Them** device (BlackHole 2ch) → Save.
-4. **Audio tab** → **Start Transcription**. Speak and have someone on a call speak: transcript lines arrive labelled `[You]` and `[Them]`.
+**Step 3: Point your sound at it.**
 
-### 7. Verify transcription works (smoke tests, no call needed)
+- **Simplest (covers every app):** System Settings → **Sound → Output → Call + Hear**. Now everything you hear also flows past GhostMind's ears.
+- **Or per call app:** in Zoom / Teams / Meet / Webex, set **Speaker = Call + Hear**.
+- **Either way, one golden rule:** your **Microphone** in the call app stays on your **real mic** — never BlackHole. If the call app uses BlackHole as its microphone, everyone on the call hears themselves echo. (GhostMind's own mic setting is separate and already points at your real mic.)
 
-```bash
-npm run test:local                 # VAD segmenter unit tests (5 tests)
-GHOSTMIND_ASR_MOCK=1 sidecar/.venv/bin/python sidecar/transcribe_sidecar.py --file <any.wav>
-# real check: record yourself saying a known sentence as sample.wav, then
-sidecar/.venv/bin/python sidecar/transcribe_sidecar.py --file sample.wav --speaker them
-```
+**Step 4: Tell GhostMind which side is which.**
+Open GhostMind → **Settings**. You should see **You** = your microphone and **Them** = **BlackHole 2ch**, then **Save Settings**. Good news: current versions check this for you — if the two sides ever end up pointing at the same device (the classic mistake, where your own voice gets labelled [Them]), the app spots it, repairs it, and tells you.
 
-### 8. Build a distributable
+**Step 5: Try it without a call.**
+Play any video with someone talking, then press **🎧 Start Listening** in GhostMind. You should see the video's speech arrive labelled **[Them]** and your own voice labelled **[You]**. If the voice on the video asks a question, watch closely — GhostMind hears it and answers automatically. That's the whole trick working end to end.
 
-```bash
-npm run build:mac    # macOS .dmg + .zip (arm64 on Apple Silicon)
-npm run build:win    # Windows .exe installer
-```
+### Part C — Check yourself in ten seconds
 
-The sidecar scripts are bundled as extra resources. **The Python runtime is not bundled**: a machine running a packaged build still needs Python 3.10–3.12 and the `npm run setup:sidecar` step (run inside the installed app's resources folder), unless/until the sidecar is frozen with PyInstaller — see Limitations.
+Any time something feels off, open **Settings → 🩺 Run checks**. It tests everything and speaks plainly: AI connection, transcription engine, microphone, call audio, screenshot permission, and secure input. Green ticks mean you're fully set up; anything else comes with a hint about what to fix.
 
-### 9. Troubleshooting
+### Troubleshooting
 
-| Problem | Fix |
+| What you're seeing | What's going on, and the fix |
 |---|---|
-| “Could not start local transcription” in the app | Sidecar not installed, or Python not found. Run step 3. If your Python lives elsewhere, set `localPythonPath` in `settings.json` (in the app's userData folder) to its full path. |
-| Transcription runs but the call side is silent | The call app isn't routing to BlackHole. Check step 4: speaker must be the `Call + Hear` Multi-Output, and **Them** in Settings must be BlackHole 2ch. |
-| Only `[Them]`, never `[You]` (or vice versa) | That track's device in Settings is wrong or muted. Re-pick it in Settings → Save. |
-| Others on the call hear themselves | Your call app microphone is set to the loopback device. Set it back to your real mic (step 4). |
-| First transcription is slow / seems stuck | It's downloading the Whisper model (once). Watch for `~/.cache/huggingface` growing, then it starts. |
-| macOS “unidentified developer” on the packaged app | `xattr -cr /Applications/GhostMind.app` — the build is not yet notarized. |
-| Something refers to `localhost:8844`, a Chrome tab, or an OpenAI key | That's v2 documentation/code — obsolete in v2.1. This README is the current source of truth (`INSTALL.md` now just points here). |
+| macOS won't open the app / "unidentified developer" | Notarization is still pending — do the one-time **Open Anyway** in Step A2. |
+| The AI pill is red / no answers come back | The API key is missing, mistyped, or the Anthropic account has no credit. Re-paste the key in Settings and check the account balance at console.anthropic.com. |
+| I see **[You]** but the call side is silent | The call's sound isn't reaching BlackHole. Check Step B3: system output (or the call app's speaker) must be **Call + Hear**, and in GhostMind's Settings, **Them** must be BlackHole 2ch. Test with a video (Step B5). |
+| Everything — even my voice — is labelled **[Them]** (or the reverse) | Both sides are set to the same device. Open Settings, set **You** = your mic and **Them** = BlackHole 2ch, and Save. Current versions detect and fix this automatically on launch. |
+| People on the call can hear themselves | Your call app's **microphone** is set to BlackHole. Set it back to your real mic (Step B3's golden rule). |
+| The first transcription seems stuck | It's the one-time model download (Step A5). Give it a minute on a first-ever launch — after that, starts are quick. |
+| Snipe screenshots come out black or nothing happens | The Screen Recording permission from Step A4 — turn GhostMind on in Privacy & Security, then quit and reopen the app once. |
+| Something mentions `localhost:8844`, a Chrome helper tab, or an OpenAI key | That's GhostMind v2 — long gone. This guide is the current one. |
+
+### Part D — Building from source (developers)
+
+End users don't need any of this — the .dmg above has the transcription engine frozen inside it. For developers:
+
+| Requirement | Notes |
+|---|---|
+| Node.js 20+ | `node -v` |
+| Python 3.12–3.14 | For the *dev* sidecar only (3.15 has no ctranslate2 wheels yet) |
+| Anthropic API key | As Step A3 |
+| BlackHole 2ch | As Part B |
+
+```bash
+git clone <this repo> ghostmind && cd ghostmind
+npm install
+npm run setup:sidecar   # one time: creates sidecar/.venv with faster-whisper
+npm run dev             # run in development (macOS permissions name it "Electron")
+npm run build:mac       # distributable .dmg + .zip (arm64 on Apple Silicon)
+```
+
+Smoke tests without a call: `npm run test:local` for the segmenter unit tests, and `GHOSTMIND_ASR_MOCK=1 sidecar/.venv/bin/python sidecar/transcribe_sidecar.py --file <any.wav>` for the sidecar. If the app reports "Could not start local transcription" in dev, the sidecar venv is missing (run `setup:sidecar`) or your Python lives somewhere unusual — set `localPythonPath` in `settings.json` (in the app's userData folder) to its full path.
 
 ---
 
@@ -237,6 +252,55 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.5.10
+
+- **Code Only mode is now on by default.** New installs (and anyone who never toggled it) get bare-code answers — no comments, no explanation — out of the box. If you switched it off yourself, your saved choice still wins; the toggle lives in Settings.
+
+## What changed in v3.5.9
+
+- **Secure Event Input while GhostMind is focused.** Monitoring software that watches keystrokes system-wide works through CGEvent taps. While any GhostMind window is focused, the app now enables macOS Secure Event Input (the mechanism behind Terminal's "Secure Keyboard Entry" and password fields), and event taps receive no keyboard events at all — nothing typed into GhostMind can be observed. It releases the moment no GhostMind window is focused, and on quit. A tiny native helper (`native/secure-input`, a raw N-API wrapper over the Carbon calls) ships inside the app; if it ever fails to load, the feature quietly disables itself and everything else keeps working. Status shows in Settings → 🩺 Run checks. Note: macOS offers no equivalent shield for mouse events — clicks remain visible to a permitted monitor, which is why GhostMind's flows are keyboard-first.
+
+## What changed in v3.5.8
+
+- **Copilot detection tightened.** v3.5.7's loosened detector over-fired on rambling speech (7 auto-answers in ~100 s of monologue, several not questions). Detection now judges only the FIRST sentence of each segment: a "?" buried mid-segment no longer triggers, sentence fragments starting with auxiliary verbs ("Are going to be…", "Is why some of your…") count only with a trailing "?", and the copilot is asked the first sentence alone instead of the whole multi-sentence blob. Real questions — including short ones and requests like "Write a function that…" / "Tell me how…" — still fire.
+- **Whisper pre-warm at launch.** The speech model used to load on the first segment after Start Listening, costing several seconds before the first transcript line. The app now spawns the engine at launch and runs one second of silence through it, so the model is already loaded when you press Start Listening. (Stopping transcription still unloads the engine.)
+
+## What changed in v3.5.7
+
+- **Copilot auto-answer actually triggers now.** The auto-answer engine received every transcript line with its speaker prefix attached ("[Them] What is…"), and the prefix silently defeated every question-starter check — only a segment that happened to end in "?" could ever fire, so in real speech the feature looked missing. Detection now runs on the clean text (both speakers' questions count), the minimum length dropped from 15 to 10 characters so short questions ("What is Rust?") qualify, each auto-answer is recorded in `audio-debug.log`, and the question bubble shows the clean question instead of the prefixed line.
+
+## What changed in v3.5.6
+
+- **Audio startup is diagnosable and per-track resilient.** v3.5.5's device resolution could still leave a session silent if one track failed to start, with nothing anywhere saying why. Now: each track starts independently — a failing call-audio device no longer takes the microphone track down with it, and vice versa — and every track failure is announced in chat with its actual error. The renderer also appends what it enumerated, what it resolved, and any start errors to `audio-debug.log` in the app's data folder. The microphone resolver now prefers the physical device behind the "Default" pseudo-device (so a sleeping Continuity/iPhone mic that enumerates first can't steal the You track), and a repaired device choice is saved immediately when the Settings panel populates, not only at capture start.
+
+## What changed in v3.5.5
+
+- **Call audio can no longer end up pointing at your own microphone.** Chromium exposes a pseudo-device called `default` (the system default input — almost always the mic). If it was ever saved as the Call Audio device — an easy accident in the setup wizard or Settings — both tracks recorded the microphone, the echo guard kept one copy, and your own voice was transcribed as **[Them]**. Device selection is now resolved everywhere it happens (Settings pickers, setup wizard, and again at capture start): a Call Audio id that is empty, `default`, stale, or the same as the microphone is treated as unset and auto-resolved to a BlackHole/Loopback device when one exists, the repair is announced in chat and saved, and when no call-audio device exists at all the app says so and explains the one-time BlackHole setup. The wizard and Settings also carry a plain warning: never pick "Default" for call audio.
+
+## What changed in v3.5.4
+
+- **The app now actually quits.** The main and sniper windows are created `closable: false` (stealth), which silently defeated every standard quit path — Dock Quit, System Settings' "Quit & Reopen", Activity Monitor's Quit, SIGTERM — because quitting tries to close all windows first and the windows refused; only the in-app Quit button (which destroys the windows itself) worked. A `before-quit` handler now destroys both windows first, so all quit paths complete, and SIGTERM is routed through the normal quit path for the same cleanup.
+- **Screen capture can recover from a wrong "denied".** Previously, if the system's preflight permission check said `denied`, capture gave up immediately — a dead end when the permission record was missing entirely (the preflight could never turn "granted" because the capture attempt that registers the app never ran) or stale. Now the first capture of a session forces one real attempt anyway: a missing record registers with the system, a wrong preflight is bypassed, and a genuine denial simply produces no image, as before.
+- **Batch snipes are reconciled, not answered one by one.** Multiple queued snapshots now carry an explicit instruction: work out how they relate first — snapshots captured together are usually parts of one thing (a question and its options, a problem and its code, a screen and its continuation after scrolling, an error and its cause) — and give one unified answer, merging overlaps and continuations. Separate answers are reserved for snapshots that are clearly unrelated.
+
+## What changed in v3.5.3
+
+- **Session auto-save.** Quitting no longer loses an unsaved conversation. The app now keeps a running draft summary of the live session (built locally, no API call — topic, latest exchange, transcript size) and writes it into the session database automatically as the app quits, by any quit path. It appears in the Memory tab labelled "Auto-saved chat…". Pressing **Save Session** still stores the richer AI-written summary and clears the draft, so a conversation is never stored twice.
+
+## What changed in v3.5.2
+
+- **Code Only mode.** A new Settings toggle — *Code Only — no comments, no explanations*. When it's on, coding answers (chat, quick actions, and Snipe) come back as a single block of bare code: no comments inside the code, no preamble, no step-by-step explanation. It works by appending an explicit override to the system prompt, and Snipe's Solve button swaps its prompt too (it normally asks for well-commented code). Non-code questions and the call features (summaries, post-call email) are unaffected.
+
+## What changed in v3.5.1
+
+- **Settings scroll fix.** A stray `</div>` in the Health Check row (v3.4) closed the Settings scroll container early, pushing the Hotkeys, Proactive, Window sections and the Save button outside it — visible but clipped, with no way to scroll and no way to save. One line removed; Settings now scrolls end to end (verified in a browser harness: panel 520px, content 1262px, wheel scrolling works over every control).
+
+## What changed in v3.5
+
+- **Multi-snapshot Snipe.** Captures now queue in the tray: take a snipe, tap **＋ Add** (or press Cmd+Shift+S again) to stack more, remove any single one with its ×, then send the whole batch to Claude with one Solve / Explain / Extract / Debug / custom question. A single snapshot works exactly as before.
+- **Settings toggle fix.** The Deep Thinking switch (added in v3.3) had never been wired to a click handler and was dead; all Settings toggles are now bound by class, so a future toggle can't silently ship unwired.
+- **Transcription can no longer fail silently.** Engine errors (model problems, engine crashes) appear as a warning in the chat instead of vanishing; the Silero VAD pass fails safe — if it ever throws, transcription retries without it and carries on; and if the first-ever transcription takes more than ~25 s (the one-time model download), the app says so instead of looking broken.
 
 ## What changed in v3.4
 
