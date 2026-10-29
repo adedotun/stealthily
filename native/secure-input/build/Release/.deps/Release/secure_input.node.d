@@ -1,0 +1,1 @@
+cmd_Release/secure_input.node := c++ -bundle -framework Carbon -undefined dynamic_lookup -Wl,-search_paths_first -mmacosx-version-min=12.0 -arch arm64 -L./Release -stdlib=libc++  -o Release/secure_input.node Release/obj.target/secure_input/src/secure_input.o -framework Carbon

@@ -1,0 +1,8 @@
+{
+  "name": "secure-input",
+  "version": "1.0.0",
+  "description": "GhostMind native helper: toggle macOS Secure Event Input so event taps cannot observe keystrokes typed into the app",
+  "private": true,
+  "main": "index.js",
+  "gypfile": true
+}
