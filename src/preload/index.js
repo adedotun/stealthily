@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('ghostmind', {
   // ── Screen capture ────────────────────────────────────────────────────────
   captureScreen:  (rect)   => ipcRenderer.invoke('capture-screen', rect),
   triggerSnipe:   ()       => ipcRenderer.invoke('trigger-snipe'),
+  captureFullScreen: ()    => ipcRenderer.invoke('capture-full-screen'),
   getPermissions:  ()      => ipcRenderer.invoke('get-permissions'),
   openScreenSettings: ()  => ipcRenderer.invoke('open-screen-settings'),
 

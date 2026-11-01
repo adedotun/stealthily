@@ -94,6 +94,62 @@ window.ghostmind.on('sysaudio-status', (st) => {
   }
 });
 
+// ── v3.8.1: echo suppression ─────────────────────────────────────────────
+// With system-audio capture, the call arrives clean as [Them] — but if it
+// also plays through speakers, the microphone hears it and transcribes
+// the caller's words a second time, as [You]. The old guard only warned
+// about this; the transcript kept the wrong attribution. Now the [You]
+// copy is dropped when it matches a recent [Them] line, and if the echo
+// landed first, the incoming [Them] line relabels it in place. [Them]
+// always wins: it is the direct feed; the mic copy is only the echo.
+const recentYouLines = [];   // { text, raw, el, idx, t }
+function echoSim(a, b) {
+  const aw = wordSet(a), bw = wordSet(b);
+  if (aw.size < 4 || bw.size < 4) return 0;
+  let inter = 0;
+  aw.forEach(w => { if (bw.has(w)) inter++; });
+  return inter / Math.min(aw.size, bw.size);
+}
+function pruneEchoState(now) {
+  while (themRecent.length && now - themRecent[0].t > 6000) themRecent.shift();
+  while (recentYouLines.length && now - recentYouLines[0].t > 8000) recentYouLines.shift();
+}
+// Returns 'drop', 'relabel' or 'keep' for an incoming final line.
+function echoVerdict(line) {
+  const now = Date.now();
+  pruneEchoState(now);
+  if (line.startsWith('[You]')) {
+    const text = line.replace(/^\[You\]\s*/, '');
+    for (const th of themRecent) {
+      if (echoSim(text, th.text) >= 0.65) return 'drop';
+    }
+    return 'keep';
+  }
+  if (line.startsWith('[Them]')) {
+    const text = line.replace(/^\[Them\]\s*/, '');
+    for (let i = recentYouLines.length - 1; i >= 0; i--) {
+      const y = recentYouLines[i];
+      if (echoSim(text, y.text) >= 0.65) {
+        // Relabel the echo in place: stored line, bubble class/name/text,
+        // and the plain-text mirror in the Audio panel.
+        state.transcript[y.idx] = line;
+        if (y.el) {
+          y.el.classList.remove('you');
+          y.el.classList.add('them');
+          const name = y.el.querySelector('.t-name');
+          if (name) name.textContent = 'Caller';
+          if (y.el.childNodes[1]) y.el.childNodes[1].textContent = text;
+        }
+        const all = document.getElementById('transcript-all');
+        if (all && y.raw) all.textContent = all.textContent.replace(y.raw, line);
+        recentYouLines.splice(i, 1);
+        return 'relabel';
+      }
+    }
+  }
+  return 'keep';
+}
+
 window.ghostmind.on('external-transcript', ({ line, partial, speaker }) => {
   if (!line) return;
 
@@ -132,8 +188,21 @@ window.ghostmind.on('external-transcript', ({ line, partial, speaker }) => {
   setStatus('listening');
 
   state.isCapturing = true;
-  state.transcript.push(line);
-  addTranscriptLine(line);
+  // v3.8.1: echo suppression — a [You] line matching the caller feed is
+  // speaker echo, not the user (see echoVerdict above).
+  const verdict = echoVerdict(line);
+  if (verdict === 'drop') {
+    try { alog('echo: dropped a [You] line matching the caller feed'); } catch (_) {}
+    return;
+  }
+  if (verdict === 'keep') {
+    state.transcript.push(line);
+    const el = addTranscriptLine(line);
+    if (line.startsWith('[You]')) {
+      recentYouLines.push({ text: line.replace(/^\[You\]\s*/, ''), raw: line, el, idx: state.transcript.length - 1, t: Date.now() });
+      if (recentYouLines.length > 6) recentYouLines.shift();
+    }
+  }
   processTranscriptLine(line);
   trackEchoAndChips(line);
 
@@ -1104,6 +1173,38 @@ document.getElementById('snipe-hotkey-btn').addEventListener('click', () => {
   window.ghostmind.triggerSnipe();
 });
 
+// ── v3.8: Cluely bar wiring ─────────────────────────────────────────────
+// Quick Answer chip: full-screen capture (same path as Cmd+Shift+F) —
+// the shot lands in the snipe queue, ready for Solve/Explain/Ask.
+document.getElementById('qa-full-btn')?.addEventListener('click', () => {
+  window.ghostmind.captureFullScreen();
+});
+// The Ask box is global now (above the panels): sending from any tab
+// lands you on Chat, where the answer streams in.
+document.getElementById('send-btn')?.addEventListener('click', () => switchTab('chat'));
+document.getElementById('chat-input')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) switchTab('chat');
+});
+// Session timer in the pill bar, driven by the capture bar's visible
+// state (the one reliable capture-on signal across mic/dictation/call).
+(function () {
+  const el = document.getElementById('session-timer');
+  if (!el) return;
+  let startedAt = null;
+  setInterval(() => {
+    const on = document.getElementById('capture-bar')?.classList.contains('visible');
+    if (on) {
+      if (!startedAt) startedAt = Date.now();
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      el.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+      el.style.display = '';
+    } else {
+      startedAt = null;
+      el.style.display = 'none';
+    }
+  }, 1000);
+})();
+
 // Receive captured snipe image from main process
 window.ghostmind.on('snipe-captured', ({ b64 }) => {
   if (!b64) {
@@ -1508,6 +1609,7 @@ function addTranscriptLine(line) {
     all.textContent += (all.textContent ? '\n' : '') + line;
     all.scrollTop = all.scrollHeight;
   }
+  return p;
 }
 
 document.getElementById('capture-stop').addEventListener('click', async () => {

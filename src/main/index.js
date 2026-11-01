@@ -42,8 +42,8 @@ function sendToRenderer(channel, data) {
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const CONFIG = {
-  width:   460,
-  height:  700,
+  width:   600,
+  height:  680,
   devMode: process.argv.includes('--dev'),
   // Lazy getters — app.getPath() must not be called before app is ready
   get settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); },
@@ -352,6 +352,8 @@ function createWindow() {
     // ── STEALTH PROPERTIES ──────────────────────────────────────────────────
     frame:               false,   // no title bar
     transparent:         true,    // true transparency
+    vibrancy:            'under-window', // v3.8: Cluely-style frosted glass (macOS)
+    visualEffectState:   'active',
     hasShadow:           true,
     alwaysOnTop:         true,
     skipTaskbar:         true,    // hidden from taskbar
@@ -656,6 +658,13 @@ ipcMain.handle('capture-screen', async (_, rect) => {
 
 ipcMain.handle('trigger-snipe', async () => {
   triggerSnipe();
+  return { ok: true };
+});
+
+// v3.8: the pill bar's Quick Answer button — same full-screen capture as
+// Cmd+Shift+F, no overlay, lands in the snipe queue like a region shot.
+ipcMain.handle('capture-full-screen', async () => {
+  await captureFullScreen();
   return { ok: true };
 });
 
