@@ -243,6 +243,16 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 ---
 
+## What changed in v3.8.1
+
+- **Fixed: the caller's words could appear as [You].** The labels themselves were never wrong — the system-audio feed is correctly tagged [Them] end to end. But when the call plays through speakers, the microphone hears it too and transcribes the caller's speech a second time, as [You], and the old echo guard only warned about it. Now it's **echo suppression**: a [You] line that matches a recent [Them] line is dropped, and if the echo lands first, the [Them] line relabels it in place (bubble, stored transcript, and the Audio panel mirror). [Them] always wins — it's the direct feed. Headphones still give the cleanest capture, but the transcript no longer misattributes the caller to you when you use speakers.
+
+## What changed in v3.8
+
+- **The Cluely look, faithfully.** The window is restructured into Cluely's two floating pieces, studied from their own screenshots: a glass **pill bar** — logo and live status, a blue Listen pill, a session timer while capturing, round icon buttons (region snipe, hide, quit) — above one rounded glass **card** holding the mode tabs (Chat / Audio / Memory / Settings), the Mic / Call audio / AI status chips, and the content. The window is a bit wider (600×680) and now uses macOS vibrancy, so the translucent fills blur the real desktop behind them like Cluely's overlay. All five themes still recolor everything underneath; Cluely blue is used only for the two primary actions (Listen and Submit).
+- **The Ask box moved up, Cluely-style.** The composer now sits at the top of the card, visible on every tab, with quick actions under it; sending from any tab lands you on Chat where the answer streams. Inside the input row: a dashed **📷 Quick Answer** chip and a blue **Submit** pill.
+- **Full-screen capture is a button now.** Quick Answer captures the entire screen in one click (the same no-overlay path as Cmd+Shift+F) and drops it into the snipe queue for Solve / Explain / Extract / Ask. Region snipe hasn't gone anywhere — it's the ◎ button in the pill bar, Ctrl+Shift+S, and the tray's ＋ Add.
+
 ## What changed in v3.7
 
 - **BlackHole is gone — call audio is system audio, full stop.** The Settings source toggle from v3.6 is removed: the [Them] track now *only* comes from the native ScreenCaptureKit helper. The Call Audio device picker, the device-repair logic that guarded it, and the setup wizard's call-audio step are all deleted, along with the long-dead Chrome Helper server code (and its BlackHole/VB-Cable instructions) in the main process. Setup is now: pick your microphone, grant one permission, done. The Installation Guide's old Part B (install BlackHole, restart, build a Multi-Output device, route your call apps) is replaced by a short explainer — there's nothing to install or route. One honest trade-off to know: [Them] is *everything* the Mac plays, so notification sounds are in the mix, and playing the call through speakers can echo into your mic (headphones fix it; the echo guard still suppresses recognised copies).
