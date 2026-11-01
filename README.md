@@ -10,6 +10,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.3:** speed — chat answers now stream in token by token, the models' built-in "thinking" pause is off by default, and the default system prompt was rewritten for a glance-and-go copilot — see [What changed in v3.3](#what-changed-in-v33).
 **v3.4:** trust + polish — the app now verifies itself (truthful AI status, live model list, one-tap health check), transcription got smarter (Silero filtering, pre-roll, echo guard), and the call experience gained compact mode, live suggestion chips, session export, and ask-my-past-sessions — see [What changed in v3.4](#what-changed-in-v34).
 **v3.5:** fixes from the first real-world test pass — multi-snapshot snipes (queue several captures, send them together), a dead Settings toggle repaired, and transcription that can no longer fail silently: engine errors surface in the chat, the Silero filter fails safe, and a slow first-run model download says so — see [What changed in v3.5](#what-changed-in-v35).
+**v3.9:** declutter — everything folds away until it is needed: auto-collapse to just the bar + Ask box when idle, status in a popover, contextual quick actions, captures as attachments, two-level Settings, a model pill beside Submit, and a keyboard-shortcut sheet — see [What changed in v3.9](#what-changed-in-v39).
 
 ---
 
@@ -242,6 +243,10 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.9
+
+Declutter, with zero functionality removed. The window now **auto-collapses** to just the pill bar and the Ask box after 90 idle seconds on the Chat tab (capture, streaming, queued captures and the wizard all block it; any activity expands it again — the chevron in the bar toggles it manually, and the window stays bottom-anchored while resizing). The Mic / Call audio / AI status pills, Setup and Compact moved into a **status popover** opened by clicking the status dot, which also hosts Run checks. The quick-action chips only appear during or after a call. There is now **one Listen control** — the Audio panel's duplicate Start Transcription button and the capture bar's Stop button are gone (Listen toggles). Screen captures became an **attachments strip** directly above the Ask row instead of a block inside the chat. Settings folds **Hotkeys** and **Proactive & Copilot** under an "Advanced settings" toggle, Quit moved to the bottom of Settings, and a **model pill** beside Submit switches the model (two-way synced with Settings). Press **?** anywhere for the keyboard-shortcut sheet.
 
 ## What changed in v3.8.1
 
