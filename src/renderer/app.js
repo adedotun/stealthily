@@ -1875,3 +1875,91 @@ function initStealthCursor() {
 }
 
 initStealthCursor();
+
+// ─── v3.9: DECLUTTER — auto-collapse, status popover, contextual
+// actions, model pill, advanced-settings fold, shortcut sheet ───────────
+(function () {
+  // Advanced-settings fold (Hotkeys + Proactive sections)
+  const advBtn = document.getElementById('adv-toggle');
+  advBtn?.addEventListener('click', () => {
+    const p = document.getElementById('panel-settings');
+    const on = p.classList.toggle('show-adv');
+    advBtn.textContent = on ? '▾ Advanced settings' : '▸ Advanced settings';
+  });
+  // Status popover (Mic / Call audio / AI pills + Setup + Compact + checks)
+  const pop = document.getElementById('status-popover');
+  const pill = document.getElementById('status-pill');
+  pill?.addEventListener('click', (e) => { e.stopPropagation(); pop?.classList.toggle('open'); poke(); });
+  document.addEventListener('click', (e) => {
+    if (pop?.classList.contains('open') && !pop.contains(e.target)) pop.classList.remove('open');
+  });
+  document.getElementById('popover-checks-btn')?.addEventListener('click', () => {
+    pop?.classList.remove('open');
+    switchTab('settings');
+    document.getElementById('run-checks-btn')?.click();
+  });
+  // Contextual action row: quick actions only during/after a call
+  const refreshCallActive = () => document.body.classList.toggle('call-active', !!(state.isCapturing || (state.transcript && state.transcript.length)));
+  setInterval(refreshCallActive, 2000);
+  refreshCallActive();
+  // Model pill in the Ask row, two-way synced with Settings → Model
+  const mp = document.getElementById('model-pill');
+  const sm = document.getElementById('s-model');
+  if (mp && sm) {
+    const mirror = () => { mp.innerHTML = sm.innerHTML; if (sm.value) mp.value = sm.value; };
+    mirror();
+    new MutationObserver(mirror).observe(sm, { childList: true });
+    sm.addEventListener('change', () => { mp.value = sm.value; });
+    mp.addEventListener('change', async () => {
+      try {
+        sm.value = mp.value;
+        if (state.settings) state.settings.model = mp.value;
+        const cur = await window.ghostmind.getSettings();
+        await window.ghostmind.saveSettings({ ...cur, model: mp.value });
+      } catch (_) {}
+    });
+  }
+  // Shortcut sheet
+  const sheet = document.getElementById('shortcuts-overlay');
+  const toggleSheet = (open) => sheet?.classList.toggle('open', open ?? !sheet.classList.contains('open'));
+  document.getElementById('shortcuts-btn')?.addEventListener('click', () => toggleSheet());
+  document.getElementById('shortcuts-open-btn')?.addEventListener('click', () => toggleSheet(true));
+  document.getElementById('shortcuts-close-btn')?.addEventListener('click', () => toggleSheet(false));
+  sheet?.addEventListener('click', (e) => { if (e.target === sheet) toggleSheet(false); });
+  document.addEventListener('keydown', (e) => {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (e.key === '?' && !/INPUT|TEXTAREA|SELECT/.test(tag)) toggleSheet();
+    if (e.key === 'Escape') toggleSheet(false);
+  });
+  // Auto-collapse: idle on the Chat tab for 90s -> bar + Ask only.
+  let collapsed = false;
+  let lastActivity = Date.now();
+  function setCollapsed(c) {
+    if (c === collapsed) return;
+    collapsed = c;
+    document.body.classList.toggle('collapsed', c);
+    try { window.ghostmind.setChromeCollapsed(c); } catch (_) {}
+  }
+  function poke() { lastActivity = Date.now(); if (collapsed) setCollapsed(false); }
+  document.getElementById('collapse-btn')?.addEventListener('click', () => {
+    if (collapsed) { poke(); } else { setCollapsed(true); }
+  });
+  document.getElementById('home-listen-btn')?.addEventListener('click', poke);
+  document.getElementById('send-btn')?.addEventListener('click', poke);
+  document.getElementById('chat-input')?.addEventListener('keydown', () => { lastActivity = Date.now(); });
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', poke));
+  window.ghostmind.on('snipe-captured', () => poke());
+  window.ghostmind.on('external-transcript', () => { lastActivity = Date.now(); });
+  setInterval(() => {
+    if (collapsed) return;
+    const panel = document.querySelector('.tab.active')?.dataset.panel;
+    const wiz = document.getElementById('wizard');
+    const wizOpen = wiz && getComputedStyle(wiz).display !== 'none' && wiz.classList.contains('open');
+    const busy = state.isCapturing
+      || document.getElementById('capture-bar')?.classList.contains('visible')
+      || document.getElementById('send-btn')?.disabled
+      || (state.snipeImages && state.snipeImages.length > 0)
+      || wizOpen;
+    if (!busy && panel === 'chat' && Date.now() - lastActivity > 90000) setCollapsed(true);
+  }, 5000);
+})();

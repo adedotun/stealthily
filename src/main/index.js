@@ -668,6 +668,17 @@ ipcMain.handle('capture-full-screen', async () => {
   return { ok: true };
 });
 
+// v3.9: auto-collapse — the renderer decides the chrome is idle and asks
+// for the short window (pill bar + Ask box only). Bottom edge stays
+// anchored so the bar doesn't jump around the screen.
+ipcMain.on('set-chrome-collapsed', (_e, collapsed) => {
+  if (!mainWindow) return;
+  const b = mainWindow.getBounds();
+  const target = collapsed ? 148 : CONFIG.height;
+  if (b.height === target) return;
+  mainWindow.setBounds({ x: b.x, y: b.y + (b.height - target), width: b.width, height: target });
+});
+
 ipcMain.handle('snipe-result', async (_, { rect }) => {
   // Called from sniper window after selection
   const b64 = await captureScreen(rect);
