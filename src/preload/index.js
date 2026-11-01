@@ -47,6 +47,11 @@ contextBridge.exposeInMainWorld('ghostmind', {
   stopLocalTranscription:  ()        => ipcRenderer.invoke('local-transcription-stop'),
   transcribeLocalSegment:  (segment) => ipcRenderer.invoke('transcribe-local-segment', segment),
 
+  // ── System audio (v3.6, ScreenCaptureKit — the [Them] track with no
+  // BlackHole). PCM frames and status arrive on the on() channels below.
+  startSysAudio:           ()        => ipcRenderer.invoke('sysaudio-start'),
+  stopSysAudio:            ()        => ipcRenderer.invoke('sysaudio-stop'),
+
   // ── Sniper window IPC (used by sniper.html) ───────────────────────────────
   snipeResult:    (rect)   => ipcRenderer.invoke('snipe-result', { rect }),
   snipeCancel:    ()       => ipcRenderer.invoke('snipe-cancel'),
@@ -57,6 +62,7 @@ contextBridge.exposeInMainWorld('ghostmind', {
       'init', 'clipboard-change', 'screen-snapshot',
       'snipe-captured', 'focus-input', 'permission-needed',
       'transcription-error', 'transcription-notice',
+      'sysaudio-pcm', 'sysaudio-status',
       'external-transcript', 'external-state',
       'ai-stream-chunk', 'ai-stream-done', 'ai-stream-error',
     ];

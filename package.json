@@ -22,6 +22,13 @@
         ],
         "from": "sidecar",
         "to": "sidecar"
+      },
+      {
+        "filter": [
+          "sysaudio"
+        ],
+        "from": "native/system-audio/build",
+        "to": "sysaudio"
       }
     ],
     "files": [
@@ -77,5 +84,5 @@
     "test": "playwright test",
     "test:local": "node --test tests-local/*.test.js"
   },
-  "version": "3.5.10"
+  "version": "3.6.0"
 }

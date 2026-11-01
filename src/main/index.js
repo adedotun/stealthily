@@ -83,6 +83,7 @@ function loadSettings() {
     localPythonPath: '',
     youDeviceId: '',
     themDeviceId: '',
+    themSource: 'blackhole', // v3.6: 'blackhole' (device above) or 'system' (ScreenCaptureKit, no driver)
     model: 'claude-sonnet-5-5',
     systemPrompt: GHOSTMIND_PROMPT,
     deepThinking: false,
@@ -667,6 +668,19 @@ function resolveBundledEngine() {
   }
   return null;
 }
+// v3.6: the ScreenCaptureKit system-audio helper (native/system-audio).
+// Packaged: extraResources puts it at process.resourcesPath/sysaudio/.
+// Dev: the locally built copy in the repo tree (native/system-audio/build.sh).
+function resolveSysAudioHelper() {
+  const candidates = [
+    path.join(process.resourcesPath || '', 'sysaudio', 'sysaudio'),
+    path.join(__dirname, '..', '..', 'native', 'system-audio', 'build', 'sysaudio'),
+  ];
+  for (const c of candidates) {
+    try { if (fs.existsSync(c)) return c; } catch (_) {}
+  }
+  return null;
+}
 function resolvePythonPath(settings) {
   if (settings.localPythonPath) return settings.localPythonPath;
   const venvNearSidecar = path.join(path.dirname(resolveSidecarPath()), '.venv',
@@ -683,6 +697,21 @@ function registerTranscription() {
     command: resolveBundledEngine(),
     model: () => loadSettings().localModel || 'base.en',
     sendToRenderer,
+  });
+}
+// v3.6: system-audio capture (ScreenCaptureKit helper) — the [Them]
+// track without BlackHole. Registered beside transcription; the
+// renderer starts/stops it with listening when themSource is 'system'.
+function registerSysAudio() {
+  const { registerSystemAudio } = require('./local/sysaudio-main');
+  registerSystemAudio({
+    ipcMain,
+    helperPath: () => resolveSysAudioHelper(),
+    sendToRenderer,
+    log: (line) => {
+      safeLog(line);
+      try { _appendDebugLog(`[${new Date().toISOString()}] ${line}`); } catch (_) {}
+    },
   });
 }
 
@@ -1395,6 +1424,7 @@ ipcMain.handle('get-diagnostics', async () => {
     secureInput: _secureInput && _secureInput.available
       ? { available: true, enabled: _secureInput.isEnabled() }
       : { available: false, enabled: false },
+    sysAudio: { helper: (() => { try { return !!resolveSysAudioHelper(); } catch (_) { return false; } })() },
   };
 });
 
@@ -1420,6 +1450,7 @@ app.whenReady().then(() => {
   createWindow();
   registerHotkeys();
   registerTranscription();
+  registerSysAudio();
   setupAutoUpdates();
 
   if (process.platform === 'darwin') {

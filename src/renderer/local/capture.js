@@ -13,6 +13,10 @@
 // Segmenter -> WAV segment -> IPC 'transcribe-local-segment'.
 // Main replies on 'external-transcript', same as the old helper flow.
 //
+// v3.6: the "them" track can instead come from native system audio
+// (ScreenCaptureKit via the main process) — see startSystemTrack and
+// feedSystemAudio below. The mic track is unchanged either way.
+//
 // Requires segmenter.js and wav.js loaded before this file
 // (renderer globals Segmenter, float32ToWavBase64), or bundling.
 
@@ -67,6 +71,18 @@ class LocalCapture {
     await ctx.audioWorklet.addModule(url);
     const source = ctx.createMediaStreamSource(stream);
     const node = new AudioWorkletNode(ctx, 'pcm-tap');
+    const segmenter = this._makeSegmenter(speaker);
+    if (this.onStream) { try { this.onStream(stream, speaker); } catch (_) {} }
+    node.port.onmessage = (ev) => segmenter.push(ev.data);
+    source.connect(node); // do NOT connect to ctx.destination — no playback
+    const track = { stream, ctx, segmenter, speaker, partialInFlight: false, partialTimer: null };
+    this._startPartials(track);
+    this.tracks.push(track);
+  }
+
+  // Segmenter wired to sendSegment, shared by the device tracks and
+  // the v3.6 system-audio track.
+  _makeSegmenter(speaker) {
     const segmenter = new Segmenter({
       speaker, sampleRate: 16000,
       onSegment: (seg) => {
@@ -76,16 +92,16 @@ class LocalCapture {
       },
     });
     segmenter.startedAtMs = performance.now();
-    if (this.onStream) { try { this.onStream(stream, speaker); } catch (_) {} }
-    node.port.onmessage = (ev) => segmenter.push(ev.data);
-    source.connect(node); // do NOT connect to ctx.destination — no playback
-    const track = { stream, ctx, segmenter, speaker, partialInFlight: false, partialTimer: null };
-    // v3.2 live partials: every 3s, if an utterance is in progress, send a
-    // snapshot for a provisional transcription (shown dimmed, replaced by
-    // the final segment). One partial in flight per track, max.
+    return segmenter;
+  }
+
+  // v3.2 live partials: every 3s, if an utterance is in progress, send a
+  // snapshot for a provisional transcription (shown dimmed, replaced by
+  // the final segment). One partial in flight per track, max.
+  _startPartials(track) {
     track.partialTimer = setInterval(() => {
       if (track.partialInFlight) return;
-      const snap = segmenter.snapshot();
+      const snap = track.segmenter.snapshot();
       if (!snap) return;
       track.partialInFlight = true;
       const wavBase64 = float32ToWavBase64(snap.samples, snap.sampleRate);
@@ -93,18 +109,67 @@ class LocalCapture {
         .catch(() => {})
         .finally(() => { track.partialInFlight = false; });
     }, 3000);
+  }
+
+  // v3.6: the [Them] track from native system audio (ScreenCaptureKit)
+  // instead of a BlackHole/Loopback device. Main runs the helper and
+  // forwards 100 ms frames of Int16 PCM at 48 kHz; feedSystemAudio()
+  // downsamples them into the 16 kHz frames the segmenter expects, so
+  // segmentation, partials and the echo guard behave identically.
+  startSystemTrack() {
+    const segmenter = this._makeSegmenter('them');
+    const track = { system: true, segmenter, speaker: 'them',
+                    partialInFlight: false, partialTimer: null,
+                    _pend48: [], _frame16: [] };
+    this._startPartials(track);
     this.tracks.push(track);
   }
 
-  async start({ youDeviceId, themDeviceId }) {
+  // One Int16 PCM chunk from main (48 kHz mono), delivered as a
+  // Uint8Array. Chunks are whole 100 ms frames in practice, but the
+  // carry buffers below tolerate any size.
+  feedSystemAudio(u8) {
+    const track = this.tracks.find(t => t.system);
+    if (!track || !u8 || u8.length < 2) return;
+    let view = u8;
+    if ((view.byteOffset || 0) % 2 !== 0) {  // Int16Array needs even alignment
+      const copy = new Uint8Array(view.length);
+      copy.set(view);
+      view = copy;
+    }
+    const i16 = new Int16Array(view.buffer, view.byteOffset || 0, Math.floor(view.length / 2));
+    for (let i = 0; i < i16.length; i++) track._pend48.push(i16[i] / 32768);
+    // 48k -> 16k: box-average each group of 3 samples (a cheap
+    // anti-alias filter, plenty for speech).
+    let n = 0;
+    while (track._pend48.length - n >= 3) {
+      track._frame16.push((track._pend48[n] + track._pend48[n + 1] + track._pend48[n + 2]) / 3);
+      n += 3;
+    }
+    track._pend48 = track._pend48.slice(n);
+    while (track._frame16.length >= 1600) {
+      const frame = new Float32Array(track._frame16.splice(0, 1600));
+      try { track.segmenter.push(frame); } catch (_) {}
+    }
+  }
+
+  async start({ youDeviceId, themDeviceId, themSource }) {
     // v3.5.6: start each track independently. Before this, one failing
     // track (e.g. an unplugged call-audio device) rejected the whole
     // start and could leave the session with no transcription at all.
     const wanted = [];
     if (youDeviceId)  wanted.push({ deviceId: youDeviceId,  speaker: 'you' });
-    if (themDeviceId) wanted.push({ deviceId: themDeviceId, speaker: 'them' });
+    if (themSource !== 'system' && themDeviceId) wanted.push({ deviceId: themDeviceId, speaker: 'them' });
     let started = 0;
     let firstError = null;
+    if (themSource === 'system') {
+      // v3.6: [Them] comes from main's system-audio stream, not from a
+      // device. The track object cannot fail to start — if the helper
+      // is down, main reports it on sysaudio-status and the track
+      // simply stays silent.
+      this.startSystemTrack();
+      started++;
+    }
     for (const t of wanted) {
       try { await this.startTrack(t); started++; }
       catch (e) {
@@ -119,8 +184,8 @@ class LocalCapture {
     for (const t of this.tracks) {
       if (t.partialTimer) clearInterval(t.partialTimer);
       t.segmenter.end();
-      t.stream.getTracks().forEach(tr => tr.stop());
-      t.ctx.close();
+      if (t.stream) t.stream.getTracks().forEach(tr => tr.stop());
+      if (t.ctx) t.ctx.close();
     }
     this.tracks = [];
   }

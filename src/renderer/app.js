@@ -62,6 +62,24 @@ window.ghostmind.on('transcription-notice', ({ text }) => {
   addMsg('system', `⏳ ${text}`);
 });
 
+// v3.6: system-audio (ScreenCaptureKit) feed for the [Them] track.
+// PCM frames go straight into the running capture; status changes are
+// logged, and errors are shown (throttled like transcription errors).
+let lastSysErr = { text: '', at: 0 };
+window.ghostmind.on('sysaudio-pcm', (data) => {
+  if (state.localCapture) { try { state.localCapture.feedSystemAudio(data); } catch (_) {} }
+});
+window.ghostmind.on('sysaudio-status', (st) => {
+  if (!st) return;
+  alog(`sysaudio: ${st.state}${st.message ? ' — ' + st.message : ''}`);
+  if (st.state === 'error' && st.message) {
+    const now = Date.now();
+    if (st.message === lastSysErr.text && now - lastSysErr.at < 30000) return;
+    lastSysErr = { text: st.message, at: now };
+    addMsg('system', `⚠ System audio: ${st.message}`);
+  }
+});
+
 window.ghostmind.on('external-transcript', ({ line, partial, speaker }) => {
   if (!line) return;
 
@@ -671,10 +689,23 @@ function applySettings(s) {
   // apply the saved picks once options exist.
   if (s.youDeviceId)  sid('s-you-device').value  = s.youDeviceId;
   if (s.themDeviceId) sid('s-them-device').value = s.themDeviceId;
+  const themSourceSel = document.getElementById('s-them-source');
+  if (themSourceSel) themSourceSel.value = s.themSource || 'blackhole';
+  syncThemSourceUI();
   updatePills();
   checkAIConnection();
   populateModels();
 }
+
+// v3.6: with the System audio source, the call-audio DEVICE picker is
+// unused — disable it so the form can't imply it still matters.
+function syncThemSourceUI() {
+  const src = document.getElementById('s-them-source');
+  const dev = document.getElementById('s-them-device');
+  if (!src || !dev) return;
+  dev.disabled = src.value === 'system';
+}
+document.getElementById('s-them-source')?.addEventListener('change', syncThemSourceUI);
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
   const s = {
@@ -684,6 +715,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     localModel:    document.getElementById('s-localmodel').value,
     youDeviceId:   document.getElementById('s-you-device').value,
     themDeviceId:  document.getElementById('s-them-device').value,
+    themSource:    document.getElementById('s-them-source')?.value || 'blackhole',
     model:         document.getElementById('s-model').value,
     systemPrompt:  document.getElementById('s-system').value.trim(),
     hotkey:        document.getElementById('s-hotkey').value.trim(),
@@ -1337,7 +1369,8 @@ async function ensureLocalCapture() {
   if (state.localCapture) return true;
   let youDeviceId  = state.settings.youDeviceId  || document.getElementById('s-you-device')?.value || '';
   let themDeviceId = state.settings.themDeviceId || document.getElementById('s-them-device')?.value || '';
-  alog(`ensure: start you=${youDeviceId} them=${themDeviceId}`);
+  const themSource = state.settings.themSource || 'blackhole';
+  alog(`ensure: start you=${youDeviceId} them=${themDeviceId} themSource=${themSource}`);
   // v3.5.5: resolve the saved ids against the devices that exist right
   // now. This repairs the classic misconfiguration — both tracks left on
   // 'default' (the microphone) — before it can label the user's own
@@ -1350,7 +1383,7 @@ async function ensureLocalCapture() {
     const inputs = await LocalCapture.listAudioInputs();
     if (inputs.length) {
       const rYou  = resolveYouDeviceId(inputs, youDeviceId, themDeviceId);
-      const rThem = resolveThemDeviceId(inputs, themDeviceId, rYou);
+      const rThem = themSource === 'system' ? '' : resolveThemDeviceId(inputs, themDeviceId, rYou);
       alog(`ensure: inputs=[${fmtInputs(inputs)}] -> rYou=${rYou || ''} rThem=${rThem || ''}`);
       if (rYou) youDeviceId = rYou;
       if (rThem && rThem !== themDeviceId) {
@@ -1358,7 +1391,7 @@ async function ensureLocalCapture() {
         addMsg('system', `🎧 Call audio fixed: now using “${label}” for the other person's voice (it was set to your microphone, which labels your own voice as [Them]).`);
         themDeviceId = rThem;
       }
-      if (!rThem && !_noCallDeviceAdvised) {
+      if (!rThem && themSource !== 'system' && !_noCallDeviceAdvised) {
         _noCallDeviceAdvised = true;
         addMsg('system', 'ℹ No call-audio device (BlackHole/Loopback) found — only your side of calls will be transcribed. Install BlackHole (free) and route the call through it; GhostMind will then pick it up automatically.');
       }
@@ -1373,12 +1406,18 @@ async function ensureLocalCapture() {
       }
     }
   } catch (_) {}
-  if (!youDeviceId && !themDeviceId) {
+  if (!youDeviceId && !themDeviceId && themSource !== 'system') {
     addMsg('system', '⚠ No audio devices selected — pick your mic and your BlackHole/Loopback device in Settings first.');
     return false;
   }
   try {
     await window.ghostmind.startLocalTranscription();
+    if (themSource === 'system') {
+      const r = await window.ghostmind.startSysAudio();
+      if (r && r.ok === false) {
+        addMsg('system', '⚠ System audio could not start — only your side of the call will be transcribed. (Details in the audio debug log.)');
+      }
+    }
     const capture = new LocalCapture({
       sendSegment: (seg) => window.ghostmind.transcribeLocalSegment(seg),
       onTrackError: (speaker, e) => {
@@ -1398,7 +1437,7 @@ async function ensureLocalCapture() {
         } catch (_) {}
       },
     });
-    await capture.start({ youDeviceId, themDeviceId });
+    await capture.start({ youDeviceId, themDeviceId, themSource });
     state.localCapture = capture;
     state.isCapturing = true;
     document.getElementById('capture-bar').classList.add('visible');
@@ -1421,6 +1460,7 @@ async function ensureLocalCapture() {
 async function stopLocalCapture() {
   if (state.localCapture) { try { state.localCapture.stop(); } catch (_) {} state.localCapture = null; }
   try { await window.ghostmind.stopLocalTranscription(); } catch (_) {}
+  try { await window.ghostmind.stopSysAudio(); } catch (_) {}
   if (state.audioContext) { try { state.audioContext.close(); } catch (_) {} state.audioContext = null; }
   state.isCapturing = false;
   document.getElementById('capture-bar').classList.remove('visible');

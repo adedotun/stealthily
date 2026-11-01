@@ -1181,9 +1181,9 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
           Captures two tracks on this machine and transcribes them locally — no browser tab, no cloud speech service:
           <ol style="margin:6px 0; padding-left:16px;">
             <li><strong>You</strong> — your microphone</li>
-            <li><strong>Them</strong> — the BlackHole / Loopback device carrying your call</li>
+            <li><strong>Them</strong> — your call audio: the Mac's system audio (built-in), or a BlackHole / Loopback device</li>
           </ol>
-          Pick both devices in <strong>Settings → Transcription</strong>. Route the call app's speaker to a Multi-Output Device (headphones + BlackHole 2ch) so you can hear them while they're captured. Full setup: README → Installation.
+          Pick your microphone and call audio source in <strong>Settings → Transcription</strong>. With the BlackHole source, route the call app's speaker to a Multi-Output Device (headphones + BlackHole 2ch) so you can hear them while they're captured. Full setup: README → Installation.
           <button class="snipe-btn" id="local-transcription-toggle-btn" style="margin-top:10px; color:var(--acid);">🎙 Start Transcription</button>
         </div>
       </div>
@@ -1241,12 +1241,19 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
           <select id="s-you-device"></select>
         </div>
         <div class="setting-row">
+          <label>Call Audio Source (track: Them)</label>
+          <select id="s-them-source">
+            <option value="system">System audio — built-in, no BlackHole needed</option>
+            <option value="blackhole">BlackHole / Loopback device</option>
+          </select>
+        </div>
+        <div class="setting-row">
           <label>Call Audio Device (track: Them) — BlackHole / Loopback</label>
           <select id="s-them-device"></select>
         </div>
         <div class="setting-row">
           <label></label>
-          <span class="diag-hint">If this ever points at your microphone (or “Default”), your own voice gets labelled “Them”. GhostMind repairs that automatically at capture start when a BlackHole/Loopback device exists.</span>
+          <span class="diag-hint">The device picker only applies to the BlackHole / Loopback source. If it ever points at your microphone (or “Default”), your own voice gets labelled “Them” — GhostMind repairs that automatically at capture start when a BlackHole/Loopback device exists.</span>
         </div>
         <div class="setting-row">
           <label>Model</label>
