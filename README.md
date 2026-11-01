@@ -19,14 +19,14 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 
 - macOS on Apple Silicon.
 - The app is signed but not yet notarized with Apple, so macOS blocks the first launch with an "unidentified developer" warning — there's a one-time, 30-second way through it in **Step 2** of the guide below.
-- You'll need your own [Anthropic API key](https://console.anthropic.com) for the AI answers (the guide shows you how to get one), and — only if you want to hear the other side of calls — the free BlackHole driver. Both are covered step by step below.
+- You'll need your own [Anthropic API key](https://console.anthropic.com) for the AI answers (the guide shows you how to get one). Hearing the other side of calls needs nothing extra — GhostMind captures your Mac's system audio natively.
 - Building from source instead? See **Part D** of the guide.
 
 ## Installation Guide
 
 Welcome — let's get you set up. There are two ways in:
 
-- **Just want to use GhostMind?** Follow **Part A** (about five minutes). If you also want it to hear the *other side* of your calls, do **Part B** as well (about ten more minutes, one restart).
+- **Just want to use GhostMind?** Follow **Part A** (about five minutes) — that's the whole setup, including hearing the *other side* of your calls: GhostMind captures your Mac's system audio natively, so there's no audio driver to install and nothing to route. **Part B** explains how that works and how to test it.
 - **Building from source?** Skip to **Part D**.
 
 You don't need to be technical. Every step says what you'll see and how you'll know it worked. The only things you'll need along the way:
@@ -54,48 +54,33 @@ GhostMind opens a short setup wizard the first time it runs.
 1. **Get a key:** go to [console.anthropic.com](https://console.anthropic.com), sign up or sign in, open **API Keys**, click **Create Key**, give it any name, and copy the key (it starts with `sk-ant-`). You'll need a little credit on the account for the key to work — Anthropic's billing page handles that.
 2. **Paste it into the wizard** and continue. Your key is stored **encrypted on this Mac** (in the macOS Keychain's secure storage) — it is never sent anywhere except to Anthropic when you ask a question.
 3. **Microphone:** when macOS asks whether GhostMind may use the microphone, click **Allow**. No mic permission, no transcription — the app can't hear you without it.
-4. **Devices:** the wizard asks which microphone is *you*. Pick your usual mic (for most people, "MacBook Pro Microphone"). The *Them* (call audio) side is Part B — if you're not setting that up yet, just continue; GhostMind works fine hearing only you.
+4. **Microphone:** the wizard asks which microphone is *you*. Pick your usual mic (for most people, "MacBook Pro Microphone"). The *Them* side needs no picking — GhostMind hears it from your Mac's system audio (Part B explains).
 
 **You'll know it worked when** the little pill in the app's top bar turns green and says the AI is connected, and asking a question in the chat gets you an answer.
 
-**Step 4: One more permission, the first time you take a screenshot (Snipe).**
-GhostMind's screenshot feature (Cmd+Shift+S) needs macOS's **Screen & System Audio Recording** permission. The first time you snipe, macOS will prompt you; if it doesn't take effect right away:
+**Step 4: One more permission — Screen & System Audio Recording.**
+Two features need macOS's **Screen & System Audio Recording** permission: screenshots (Snipe, Cmd+Shift+S) and hearing the other side of your calls (your Mac's system audio). The first time you use either, macOS will prompt you; if it doesn't take effect right away:
 
 1. **System Settings → Privacy & Security → Screen & System Audio Recording** — turn **GhostMind** on.
-2. **Quit GhostMind completely and reopen it.** macOS insists on the restart for this one permission; after that, Snipe just works.
+2. **Quit GhostMind completely and reopen it.** macOS insists on the restart for this one permission; after that, both features just work.
 
 **Step 5: Give the first launch a moment.**
 The first time GhostMind starts, it quietly downloads its speech model (about 150 MB) in the background. On a decent connection that's under a minute; on a slow one, a few minutes. It happens **once, ever** — after that, transcription starts in seconds and works completely offline.
 
-### Part B — Hear the other side of the call (BlackHole)
+### Part B — Hear the other side of the call (built in)
 
-Here's the thing: macOS doesn't let any app record what the *other person* on a call is saying — apps can only hear your microphone. The workaround is a free, open-source virtual audio cable called **BlackHole**. You route the call's sound through it, GhostMind listens to the cable, and you still hear everything exactly as before. It's a one-time setup.
+Older versions of GhostMind needed a free virtual audio cable (BlackHole) and a fair amount of routing to hear the other side of a call. **Not anymore.** GhostMind now captures your Mac's **system audio** directly, using the same macOS technology screen recorders use:
 
-**Step 1: Install BlackHole, then restart your Mac.**
+- Whatever your Mac plays — the call app's speaker output, a video, a voice note — GhostMind hears it and labels it **[Them]**.
+- There's **no driver to install, no Multi-Output device to build, and no sound settings to change**. Your call apps keep working exactly as they did.
+- It rides on the **Screen & System Audio Recording** permission from Step A4 — if you skipped that step, do it now and reopen the app once.
 
-- **Easiest:** go to [existential.audio/blackhole](https://existential.audio/blackhole), enter your email to get the download, choose **BlackHole 2ch**, and run the installer (it will ask for your Mac password — that's the audio driver being installed).
-- **Or, with Homebrew:** `brew install --cask blackhole-2ch`
-- **Then restart your Mac.** The driver only loads after a restart; skipping this is the #1 reason "BlackHole isn't showing up" for people.
+Two honest consequences of hearing *everything* the Mac plays:
 
-**Step 2: Build the "Call + Hear" output (two minutes, in Audio MIDI Setup).**
-BlackHole alone is a one-way street — sound sent to it is sound *you* can't hear. The fix is a combined output that sends sound to your ears **and** to BlackHole at the same time:
+- **Notification sounds and music are in the mix too.** A notification ding mid-call is part of the system audio. If it distracts you, silence notifications during calls (macOS Focus / Do Not Disturb). Speech is what Whisper transcribes; dings mostly pass through unnoticed.
+- **Use headphones on calls when you can.** If the other person's voice comes out of your speakers, your microphone hears it too, and the transcript can show an echo. GhostMind quietly suppresses exact echo copies it recognises, but headphones remove the problem at the source.
 
-1. Open **Audio MIDI Setup** (press Cmd+Space, type "Audio MIDI", hit Enter).
-2. Bottom-left corner: click **+** → **Create Multi-Output Device**.
-3. In the list on the right, tick **your speakers or headphones first**, then tick **BlackHole 2ch**. (Your speakers first means they stay the clock source — sound stays in sync. Tick **Drift Correction** for BlackHole.)
-4. Right-click the new device and **rename it `Call + Hear`** so you can spot it later.
-
-**Step 3: Point your sound at it.**
-
-- **Simplest (covers every app):** System Settings → **Sound → Output → Call + Hear**. Now everything you hear also flows past GhostMind's ears.
-- **Or per call app:** in Zoom / Teams / Meet / Webex, set **Speaker = Call + Hear**.
-- **Either way, one golden rule:** your **Microphone** in the call app stays on your **real mic** — never BlackHole. If the call app uses BlackHole as its microphone, everyone on the call hears themselves echo. (GhostMind's own mic setting is separate and already points at your real mic.)
-
-**Step 4: Tell GhostMind which side is which.**
-Open GhostMind → **Settings**. You should see **You** = your microphone and **Them** = **BlackHole 2ch**, then **Save Settings**. Good news: current versions check this for you — if the two sides ever end up pointing at the same device (the classic mistake, where your own voice gets labelled [Them]), the app spots it, repairs it, and tells you.
-
-**Step 5: Try it without a call.**
-Play any video with someone talking, then press **🎧 Start Listening** in GhostMind. You should see the video's speech arrive labelled **[Them]** and your own voice labelled **[You]**. If the voice on the video asks a question, watch closely — GhostMind hears it and answers automatically. That's the whole trick working end to end.
+**Try it without a call:** play any video with someone talking, then press **🎧 Start Listening** in GhostMind. You should see the video's speech arrive labelled **[Them]**, and your own voice labelled **[You]**. If the voice on the video asks a question, watch closely — GhostMind hears it and answers automatically. That's the whole trick working end to end.
 
 ### Part C — Check yourself in ten seconds
 
@@ -107,9 +92,10 @@ Any time something feels off, open **Settings → 🩺 Run checks**. It tests ev
 |---|---|
 | macOS won't open the app / "unidentified developer" | Notarization is still pending — do the one-time **Open Anyway** in Step A2. |
 | The AI pill is red / no answers come back | The API key is missing, mistyped, or the Anthropic account has no credit. Re-paste the key in Settings and check the account balance at console.anthropic.com. |
-| I see **[You]** but the call side is silent | The call's sound isn't reaching BlackHole. Check Step B3: system output (or the call app's speaker) must be **Call + Hear**, and in GhostMind's Settings, **Them** must be BlackHole 2ch. Test with a video (Step B5). |
-| Everything — even my voice — is labelled **[Them]** (or the reverse) | Both sides are set to the same device. Open Settings, set **You** = your mic and **Them** = BlackHole 2ch, and Save. Current versions detect and fix this automatically on launch. |
-| People on the call can hear themselves | Your call app's **microphone** is set to BlackHole. Set it back to your real mic (Step B3's golden rule). |
+| I see **[You]** but the call side is silent | Call audio rides on the **Screen & System Audio Recording** permission — check GhostMind is ON in that pane (Step A4), then quit and reopen the app. Also make sure the call itself is audible (volume up, not muted in the call app) and test with a video (Part B). 🩺 Run checks has a "Call audio" row that flags a missing capture helper. |
+| Notification dings and music show up as **[Them]** | **[Them]** is everything your Mac plays (Part B) — that's by design. Silence notifications during calls (Focus / Do Not Disturb) if it bothers you. |
+| The other person's words also appear as **[You]** | That's your speakers feeding your microphone — an echo, not a mix-up: the two tracks come from physically separate sources. Use headphones, or lower the speaker volume. |
+| People on the call can hear themselves | Your call app's **microphone** is set to something other than your real mic (a virtual device, or your speakers echoing into it). Set the call app's microphone back to your real microphone and try headphones. |
 | The first transcription seems stuck | It's the one-time model download (Step A5). Give it a minute on a first-ever launch — after that, starts are quick. |
 | Snipe screenshots come out black or nothing happens | The Screen Recording permission from Step A4 — turn GhostMind on in Privacy & Security, then quit and reopen the app once. |
 | Something mentions `localhost:8844`, a Chrome helper tab, or an OpenAI key | That's GhostMind v2 — long gone. This guide is the current one. |
@@ -123,7 +109,6 @@ End users don't need any of this — the .dmg above has the transcription engine
 | Node.js 20+ | `node -v` |
 | Python 3.12–3.14 | For the *dev* sidecar only (3.15 has no ctranslate2 wheels yet) |
 | Anthropic API key | As Step A3 |
-| BlackHole 2ch | As Part B |
 
 ```bash
 git clone <this repo> ghostmind && cd ghostmind
@@ -132,6 +117,8 @@ npm run setup:sidecar   # one time: creates sidecar/.venv with faster-whisper
 npm run dev             # run in development (macOS permissions name it "Electron")
 npm run build:mac       # distributable .dmg + .zip (arm64 on Apple Silicon)
 ```
+
+The system-audio helper (`native/system-audio`, Swift) is committed prebuilt; if you change its source, rebuild it with `zsh native/system-audio/build.sh` before `npm run build:mac` so the new binary gets packaged.
 
 Smoke tests without a call: `npm run test:local` for the segmenter unit tests, and `GHOSTMIND_ASR_MOCK=1 sidecar/.venv/bin/python sidecar/transcribe_sidecar.py --file <any.wav>` for the sidecar. If the app reports "Could not start local transcription" in dev, the sidecar venv is missing (run `setup:sidecar`) or your Python lives somewhere unusual — set `localPythonPath` in `settings.json` (in the app's userData folder) to its full path.
 
@@ -164,12 +151,12 @@ Full AI chat with Claude (default model `claude-sonnet-5-5`, selectable in Setti
 - One-click: **Solve** / **Explain** / **Extract text** / **Debug** or a custom question
 - The screenshot goes to Claude with vision
 
-### 🎙 Local audio capture & transcription (rewritten in v2.1)
-- **Two tracks, never mixed:** your mic is transcribed as `[You]`, the call feed (BlackHole/Loopback) as `[Them]` — speaker separation without a diarization model
-- Devices are picked **exactly, inside the app** (Settings) — no dependence on any browser's default microphone
+### 🎙 Local audio capture & transcription
+- **Two tracks, never mixed:** your mic is transcribed as `[You]`, your Mac's system audio as `[Them]` — speaker separation without a diarization model
+- Your microphone is picked **exactly, inside the app** (Settings); the call side needs no picking at all — since v3.7 it comes from a native ScreenCaptureKit helper, so there's no virtual audio driver (BlackHole and friends) to install or route
 - Capture runs through a Web Audio worklet at 16kHz with a voice-activity segmenter: only speech segments reach Whisper, cut on natural pauses
 - Transcription by **faster-whisper / mlx-whisper running on your machine**. Audio never leaves the device; only the resulting transcript text is sent to Claude, as chat context
-- Live waveform from the call track, full transcript panel, one-click **Analyze Full Transcript** (summary, decisions, action items)
+- Live waveform, full transcript panel, one-click **Analyze Full Transcript** (summary, decisions, action items)
 - The chat **mic button** is dictation: it runs the same local pipeline and drops your words into the chat input
 
 ### 🎨 Interface themes (v2.2)
@@ -203,30 +190,33 @@ ghostmind/
 │   ├── transcribe_sidecar.py       # faster-whisper / mlx-whisper, stdio JSON-lines
 │   └── requirements.txt
 ├── tests-local/                    # node --test unit tests for the segmenter
+├── native/system-audio/          # Swift ScreenCaptureKit helper (system audio → PCM stream)
 ├── build/
 │   └── entitlements.mac.plist
 └── src/
     ├── main/
     │   ├── index.js                # window, hotkeys, capture, IPC, settings
-    │   └── local/transcriber-main.js  # spawns/manages the Python sidecar
+    │   ├── local/transcriber-main.js  # spawns/manages the Python sidecar
+    │   └── local/sysaudio-main.js     # spawns the ScreenCaptureKit helper, forwards its PCM
     ├── preload/
     │   └── index.js                # secure contextBridge API surface
     └── renderer/
         ├── index.html              # UI shell
         ├── app.js                  # AI engine, proactive logic, capture UI
         ├── local/
-        │   ├── capture.js          # dual-track getUserMedia + AudioWorklet
+        │   ├── capture.js          # mic getUserMedia track + system-audio track
         │   ├── segmenter.js        # voice-activity segmentation (per track)
         │   └── wav.js              # Float32 PCM → WAV
         └── sniper.html             # fullscreen region selector
 ```
 
-### Audio flow (v2.1)
+### Audio flow
 
 ```
-Mic ──(exact deviceId)──┐
-                        ├─→ AudioWorklet 16kHz → Segmenter (VAD) → WAV segment
-BlackHole ─(exact id)───┘        (per track, never mixed)              │
+Mic ──(exact deviceId)──→ AudioWorklet 16kHz ──┐
+                                                ├─→ Segmenter (VAD) → WAV segment
+Mac system audio ──(ScreenCaptureKit helper,    │        (per track, never mixed)
+   framed PCM 48kHz → downsampled in renderer) ─┘
                                           IPC transcribe-local-segment ▼
 Main: LocalTranscriber ── stdin JSON lines ──→ Python sidecar (Whisper)
                                           ◄── {speaker, text, …} ──────┘
@@ -252,6 +242,16 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.7
+
+- **BlackHole is gone — call audio is system audio, full stop.** The Settings source toggle from v3.6 is removed: the [Them] track now *only* comes from the native ScreenCaptureKit helper. The Call Audio device picker, the device-repair logic that guarded it, and the setup wizard's call-audio step are all deleted, along with the long-dead Chrome Helper server code (and its BlackHole/VB-Cable instructions) in the main process. Setup is now: pick your microphone, grant one permission, done. The Installation Guide's old Part B (install BlackHole, restart, build a Multi-Output device, route your call apps) is replaced by a short explainer — there's nothing to install or route. One honest trade-off to know: [Them] is *everything* the Mac plays, so notification sounds are in the mix, and playing the call through speakers can echo into your mic (headphones fix it; the echo guard still suppresses recognised copies).
+- **Cleaner, calmer UI (Cluely-style pass).** Quieter chrome: a slimmer title bar with a sentence-case wordmark (the hardcoded version tag is gone), pill-shaped tabs, borderless home and composer areas, Setup/Compact as proper pills, sentence-case Settings section titles, and a calmer Audio panel. All additive CSS overrides — the five themes are untouched underneath.
+- The home **Call audio** pill is now truthful about system audio: it probes for the bundled helper at launch and follows live capture status. The live waveform now follows your microphone (the [Them] track has no stream to visualise anymore).
+
+## What changed in v3.6
+
+- **Native system-audio capture (ScreenCaptureKit) as an alternative [Them] source.** A signed Swift helper (`native/system-audio`) captures the Mac's output mix — no BlackHole install, no restart, no Multi-Output routing — and streams framed 48 kHz PCM to the renderer, which downsamples it into the same segmenter the device track used. Settings gained a Call Audio Source choice (System audio / BlackHole device), defaulting to BlackHole so existing setups didn't change. Failures surface in chat and the debug log instead of going silent. Two engineering notes: the helper must be signed with a stable identity or TCC refuses it with -3801, and ScreenCaptureKit delivers planar stereo, so the AudioBufferList needs room for two buffers or extraction fails with -12737.
 
 ## What changed in v3.5.10
 
