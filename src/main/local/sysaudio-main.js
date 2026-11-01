@@ -4,9 +4,9 @@
 // Spawns the ScreenCaptureKit helper (native/system-audio — packaged via
 // extraResources, see package.json) in --stream mode and forwards its
 // framed Int16 PCM (48 kHz mono, one 100 ms frame per message) to the
-// renderer on 'sysaudio-pcm'. The renderer feeds it into the SAME
-// segmenter the BlackHole track uses, so [Them] transcription works
-// with no virtual audio driver installed and no routing changes.
+// renderer on 'sysaudio-pcm'. The renderer feeds it into the same
+// segmenter the microphone track uses, so [Them] transcription needs
+// no virtual audio driver installed and no routing changes.
 //
 // Wire format from the helper's stdout: UInt32 little-endian payload
 // byte count, then that many bytes of Int16 PCM. Helper logs go to its
@@ -36,7 +36,7 @@ class SystemAudioCapture {
     if (this.proc) return { ok: true, already: true };
     const p = this._resolvePath();
     if (!p || !fs.existsSync(p)) {
-      const message = 'The system-audio helper is missing from this install — the BlackHole source still works.';
+      const message = 'The system-audio helper is missing from this install — call audio (the other side) cannot be captured.';
       this.sendToRenderer('sysaudio-status', { state: 'error', message });
       return { ok: false, error: 'helper-missing' };
     }

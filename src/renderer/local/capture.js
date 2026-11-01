@@ -1,21 +1,17 @@
 'use strict';
 // GhostMind RENDERER: dual-track local capture.
 //
-// This is the piece the Chrome Helper could never do: pick the EXACT
-// audio device per track, inside Electron, instead of relying on
-// Chrome's default microphone.
+//   track "you"  -> your real microphone (exact deviceId from Settings,
+//                   via getUserMedia)
+//   track "them" -> the Mac's system audio, captured natively by the
+//                   ScreenCaptureKit helper in the main process and
+//                   streamed here as PCM — see startSystemTrack and
+//                   feedSystemAudio below. (Until v3.6 this track needed
+//                   a BlackHole/Loopback virtual device; v3.7 removed
+//                   that path entirely.)
 //
-//   track "you"  -> your real microphone (deviceId chosen by the user)
-//   track "them" -> the Loopback Audio / BlackHole device that carries
-//                   the call (deviceId chosen by the user)
-//
-// Each track: getUserMedia -> AudioContext(16kHz) -> AudioWorklet ->
-// Segmenter -> WAV segment -> IPC 'transcribe-local-segment'.
-// Main replies on 'external-transcript', same as the old helper flow.
-//
-// v3.6: the "them" track can instead come from native system audio
-// (ScreenCaptureKit via the main process) — see startSystemTrack and
-// feedSystemAudio below. The mic track is unchanged either way.
+// Each track: samples -> Segmenter -> WAV segment -> IPC
+// 'transcribe-local-segment'. Main replies on 'external-transcript'.
 //
 // Requires segmenter.js and wav.js loaded before this file
 // (renderer globals Segmenter, float32ToWavBase64), or bundling.
@@ -54,8 +50,6 @@ class LocalCapture {
   static async listAudioInputs() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     return devices.filter(d => d.kind === 'audioinput');
-    // Pick: you  = the mic whose label matches your headset
-    //       them = label containing 'Loopback' or 'BlackHole'
   }
 
   async startTrack({ deviceId, speaker }) {
@@ -111,11 +105,11 @@ class LocalCapture {
     }, 3000);
   }
 
-  // v3.6: the [Them] track from native system audio (ScreenCaptureKit)
-  // instead of a BlackHole/Loopback device. Main runs the helper and
-  // forwards 100 ms frames of Int16 PCM at 48 kHz; feedSystemAudio()
-  // downsamples them into the 16 kHz frames the segmenter expects, so
-  // segmentation, partials and the echo guard behave identically.
+  // The [Them] track from native system audio (ScreenCaptureKit).
+  // Main runs the helper and forwards 100 ms frames of Int16 PCM at
+  // 48 kHz; feedSystemAudio() downsamples them into the 16 kHz frames
+  // the segmenter expects, so segmentation, partials and the echo
+  // guard behave exactly as they do for the microphone track.
   startSystemTrack() {
     const segmenter = this._makeSegmenter('them');
     const track = { system: true, segmenter, speaker: 'them',
@@ -153,23 +147,18 @@ class LocalCapture {
     }
   }
 
-  async start({ youDeviceId, themDeviceId, themSource }) {
-    // v3.5.6: start each track independently. Before this, one failing
-    // track (e.g. an unplugged call-audio device) rejected the whole
-    // start and could leave the session with no transcription at all.
-    const wanted = [];
-    if (youDeviceId)  wanted.push({ deviceId: youDeviceId,  speaker: 'you' });
-    if (themSource !== 'system' && themDeviceId) wanted.push({ deviceId: themDeviceId, speaker: 'them' });
+  async start({ youDeviceId }) {
     let started = 0;
     let firstError = null;
-    if (themSource === 'system') {
-      // v3.6: [Them] comes from main's system-audio stream, not from a
-      // device. The track object cannot fail to start — if the helper
-      // is down, main reports it on sysaudio-status and the track
-      // simply stays silent.
-      this.startSystemTrack();
-      started++;
-    }
+    // [Them] comes from main's system-audio stream, not from a device.
+    // The track object cannot fail to start — if the helper is down,
+    // main reports it on sysaudio-status and the track stays silent.
+    this.startSystemTrack();
+    started++;
+    // v3.5.6: the microphone track starts independently — its failure
+    // is reported per-track instead of taking the whole capture down.
+    const wanted = [];
+    if (youDeviceId) wanted.push({ deviceId: youDeviceId, speaker: 'you' });
     for (const t of wanted) {
       try { await this.startTrack(t); started++; }
       catch (e) {

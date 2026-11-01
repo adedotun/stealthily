@@ -141,13 +141,6 @@ body {
   color: var(--acid);
   text-shadow: 0 0 20px var(--acid-glow);
 }
-#logo-version {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--muted2);
-  letter-spacing: 1px;
-}
-
 #titlebar-right {
   display: flex;
   align-items: center;
@@ -1026,6 +1019,42 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
   font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .postcall-card .pc-actions button:hover { border-color: var(--acid); color: var(--acid); }
+/* ── v3.7 CLEAN UI PASS ───────────────────────────────────────────────────
+   Cluely-style: one calm bar, sentence-case type, pill-first controls,
+   fewer boxes. Additive overrides only — delete this block to revert. */
+#titlebar { height: 40px; }
+#logo-name {
+  text-transform: none; letter-spacing: 0.2px; font-weight: 700;
+  font-size: 13.5px; text-shadow: none; color: var(--text);
+}
+#status-pill {
+  font-family: var(--font-ui); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.2px; text-transform: none; padding: 4px 10px;
+}
+#tabbar { height: 34px; border-bottom: none; }
+.tab {
+  text-transform: none; letter-spacing: 0; font-weight: 500;
+  font-size: 12px; border-radius: 999px; height: 25px; padding: 0 12px;
+}
+.tab.active { border-color: transparent; }
+#home-bar { border-bottom: none; padding: 10px 14px 6px; gap: 8px; }
+#home-listen-btn { box-shadow: 0 2px 10px var(--acid-dim); }
+#home-setup-btn, #home-compact-btn {
+  background: var(--bg3); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 10px;
+}
+#home-setup-btn { margin-left: auto; }
+#home-compact-btn { margin-left: 0; }
+#input-area { border-top: none; padding-top: 6px; }
+#input-row { border-radius: 18px; }
+.input-btn { border-radius: 999px; }
+.setting-section-title {
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 700;
+  letter-spacing: 0.3px; text-transform: none; color: var(--text-dim);
+  border-bottom: none; padding-bottom: 0;
+}
+#panel-settings { gap: 22px; }
+#transcript-scroll .t-line { border-radius: 14px; }
 </style>
 </head>
 <body>
@@ -1050,7 +1079,6 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
           </svg>
         </div>
         <span id="logo-name">GhostMind</span>
-        <span id="logo-version">v3.5</span>
       </div>
     </div>
     <div id="titlebar-right">
@@ -1123,7 +1151,7 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
   <!-- PANEL: CHAT -->
   <div class="panel active" id="panel-chat">
     <div id="messages">
-      <div class="msg system"><div class="bubble">GHOSTMIND ONLINE — INVISIBLE TO ALL SCREEN CAPTURE</div></div>
+      <div class="msg system"><div class="bubble">GhostMind is ready — invisible to screen capture.</div></div>
     </div>
 
     <!-- Snipe tray -->
@@ -1172,18 +1200,18 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
   <!-- PANEL: AUDIO -->
   <div class="panel" id="panel-audio-panel">
     <div id="panel-audio">
-      <div id="local-audio-panel" style="display:flex; flex-direction:column; gap:12px; border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:var(--bg2);">
-        <div style="font-family:var(--font-mono); font-size:10px; letter-spacing:1px; color:var(--acid); display:flex; align-items:center; gap:6px;">
+      <div id="local-audio-panel" style="display:flex; flex-direction:column; gap:12px; padding:2px;">
+        <div style="font-size:12px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:7px;">
           <span style="display:inline-block; width:6px; height:6px; background:var(--acid); border-radius:50%; box-shadow:0 0 8px var(--acid);"></span>
-          LISTEN TO MY CALL · PRIVATE — STAYS ON THIS DEVICE
+          Listen to my call — private, stays on this device
         </div>
         <div style="font-size:11px; color:var(--text-dim); line-height:1.6;">
           Captures two tracks on this machine and transcribes them locally — no browser tab, no cloud speech service:
           <ol style="margin:6px 0; padding-left:16px;">
             <li><strong>You</strong> — your microphone</li>
-            <li><strong>Them</strong> — your call audio: the Mac's system audio (built-in), or a BlackHole / Loopback device</li>
+            <li><strong>Them</strong> — the other side of the call, captured straight from your Mac's system audio</li>
           </ol>
-          Pick your microphone and call audio source in <strong>Settings → Transcription</strong>. With the BlackHole source, route the call app's speaker to a Multi-Output Device (headphones + BlackHole 2ch) so you can hear them while they're captured. Full setup: README → Installation.
+          There's nothing to install or route for call audio — GhostMind hears whatever your Mac plays. Just pick your microphone in <strong>Settings → Transcription</strong>.
           <button class="snipe-btn" id="local-transcription-toggle-btn" style="margin-top:10px; color:var(--acid);">🎙 Start Transcription</button>
         </div>
       </div>
@@ -1241,19 +1269,8 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
           <select id="s-you-device"></select>
         </div>
         <div class="setting-row">
-          <label>Call Audio Source (track: Them)</label>
-          <select id="s-them-source">
-            <option value="system">System audio — built-in, no BlackHole needed</option>
-            <option value="blackhole">BlackHole / Loopback device</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <label>Call Audio Device (track: Them) — BlackHole / Loopback</label>
-          <select id="s-them-device"></select>
-        </div>
-        <div class="setting-row">
-          <label></label>
-          <span class="diag-hint">The device picker only applies to the BlackHole / Loopback source. If it ever points at your microphone (or “Default”), your own voice gets labelled “Them” — GhostMind repairs that automatically at capture start when a BlackHole/Loopback device exists.</span>
+          <label>Call audio (track: Them)</label>
+          <span class="diag-hint">Captured from your Mac's system audio — GhostMind hears the other side of the call directly, so there's no driver to install and nothing to route. Just keep your call volume up.</span>
         </div>
         <div class="setting-row">
           <label>Model</label>
@@ -1408,12 +1425,9 @@ body.compact #messages, body.compact #input-area, body.compact #quick-bar { disp
       <div class="wiz-step" data-step="3">
         <div class="wiz-emoji">🎙️</div>
         <div class="wiz-title">Check your sound</div>
-        <div class="wiz-sub">Pick your microphone, then tap Test and speak — the green bar should dance. "Call audio" is how GhostMind hears the other person (usually BlackHole or Loopback).</div>
+        <div class="wiz-sub">Pick your microphone, then tap Test and speak — the green bar should dance. The other side of your calls needs no setup at all: GhostMind hears them straight from your Mac's system audio.</div>
         <label class="wiz-label" for="wiz-you">Your microphone</label>
         <select class="wiz-select" id="wiz-you"></select>
-        <label class="wiz-label" for="wiz-them">Call audio (the other person)</label>
-        <select class="wiz-select" id="wiz-them"></select>
-        <div class="wiz-note">⚠ Never pick “Default” for call audio — that's your own microphone, and your voice would be labelled as the other person. GhostMind auto-picks BlackHole/Loopback whenever it finds one.</div>
         <div id="wiz-level"><div id="wiz-level-fill"></div></div>
         <button class="wiz-btn secondary" id="wiz-test-btn">🎤 Test my voice</button>
         <button class="wiz-btn" id="wiz-sound-btn">Sounds good — continue</button>

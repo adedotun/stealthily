@@ -62,7 +62,18 @@ window.ghostmind.on('transcription-notice', ({ text }) => {
   addMsg('system', `⏳ ${text}`);
 });
 
-// v3.6: system-audio (ScreenCaptureKit) feed for the [Them] track.
+// System-audio health for the home pill: null = unknown yet, true =
+// helper present/capturing, false = failed. Probed once at boot from
+// diagnostics, then kept live by the sysaudio-status events below.
+var sysAudioReady = null;
+(async () => {
+  try {
+    const d = await window.ghostmind.getDiagnostics();
+    if (d && d.sysAudio && sysAudioReady === null) { sysAudioReady = !!d.sysAudio.helper; updatePills(); }
+  } catch (_) {}
+})();
+
+// System-audio (ScreenCaptureKit) feed for the [Them] track.
 // PCM frames go straight into the running capture; status changes are
 // logged, and errors are shown (throttled like transcription errors).
 let lastSysErr = { text: '', at: 0 };
@@ -72,6 +83,9 @@ window.ghostmind.on('sysaudio-pcm', (data) => {
 window.ghostmind.on('sysaudio-status', (st) => {
   if (!st) return;
   alog(`sysaudio: ${st.state}${st.message ? ' — ' + st.message : ''}`);
+  if (st.state === 'running') sysAudioReady = true;
+  if (st.state === 'error') sysAudioReady = false;
+  try { updatePills(); } catch (_) {}
   if (st.state === 'error' && st.message) {
     const now = Date.now();
     if (st.message === lastSysErr.text && now - lastSysErr.at < 30000) return;
@@ -302,9 +316,14 @@ function updatePills() {
       : 'AI connection not verified yet';
   }
   const youSel  = document.getElementById('s-you-device');
-  const themSel = document.getElementById('s-them-device');
   if (mic  && youSel)  mic.classList.toggle('ok', youSel.options.length > 0);
-  if (call && themSel) call.classList.toggle('ok', !!themSel.value);
+  if (call) {
+    call.classList.toggle('ok', sysAudioReady === true);
+    call.classList.toggle('bad', sysAudioReady === false);
+    call.title = sysAudioReady === false
+      ? 'System audio capture hit a problem — open Settings → Transcription for details'
+      : 'Call audio comes from your Mac\u2019s system audio — nothing to install or route';
+  }
 }
 
 document.getElementById('home-listen-btn')?.addEventListener('click', () => {
@@ -393,16 +412,13 @@ document.getElementById('run-checks-btn')?.addEventListener('click', async () =>
     const all = await navigator.mediaDevices.enumerateDevices();
     devs = all.filter(d => d.kind === 'audioinput');
   } catch (_) {}
-  const labels = devs.map(d => (d.label || '').toLowerCase());
-  const themSel = document.getElementById('s-them-device');
-  const callOk = !!(themSel && themSel.value) || labels.some(l => l.includes('blackhole') || l.includes('loopback'));
   const diag = await window.ghostmind.getDiagnostics().catch(() => null);
 
   box.innerHTML = '';
   mkRow(hasKey ? '✅' : '❌', 'API key saved', hasKey ? '' : 'Add your Anthropic key in Settings, then Save.');
   mkRow(probe.ok ? '✅' : '❌', probe.ok ? `AI answers — ${probe.model} in ${probe.ms}ms` : 'AI is not answering', probe.ok ? '' : (probe.error || ''));
   mkRow(devs.length ? '✅' : '❌', devs.length ? `Microphone found — ${devs.length} input device${devs.length === 1 ? '' : 's'}` : 'No microphone found', devs.length ? '' : 'Check the macOS Microphone permission, and that a mic is connected.');
-  mkRow(callOk ? '✅' : '⚠️', 'Call audio device', callOk ? '' : 'No BlackHole/Loopback device selected — GhostMind can only hear the caller through one. See the README routing guide.');
+  mkRow(diag && diag.sysAudio && diag.sysAudio.helper ? '✅' : '❌', 'Call audio — Mac system audio', diag && diag.sysAudio && diag.sysAudio.helper ? '' : 'The system-audio helper is missing from this build, so the other side of calls cannot be captured.');
   if (diag) {
     const eng = diag.engine || {};
     const engOk = eng.bundled || (eng.python && eng.sidecar);
@@ -441,7 +457,7 @@ function trackEchoAndChips(line) {
       const sim = inter / Math.max(yw.size, tw.size);
       if (sim >= 0.7 && now - lastEchoWarnAt > 60000) {
         lastEchoWarnAt = now;
-        addMsg('system', '⚠ Echo check: your microphone seems to be picking up the caller. Headphones fix this — or check that your call app is using your real microphone, not Loopback/BlackHole.');
+        addMsg('system', '⚠ Echo check: your microphone seems to be picking up the caller through your speakers. Headphones fix this.');
         break;
       }
     }
@@ -565,9 +581,8 @@ async function wizFillDevices() {
       tmp.getTracks().forEach(t => t.stop());
     } catch (_) {}
     const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
-    const fill = (id, preferCall) => {
-      const sel = document.getElementById(id);
-      if (!sel) return;
+    const sel = document.getElementById('wiz-you');
+    if (sel) {
       sel.innerHTML = '';
       devices.forEach((d, i) => {
         const opt = document.createElement('option');
@@ -575,19 +590,9 @@ async function wizFillDevices() {
         opt.textContent = d.label || `Microphone ${i + 1}`;
         sel.appendChild(opt);
       });
-      // v3.5.5: resolve through the shared helpers — a saved 'default'
-      // (the microphone) must never land on the Call audio picker.
-      if (preferCall) {
-        const youVal = document.getElementById('wiz-you')?.value || state.settings?.youDeviceId;
-        const r = resolveThemDeviceId(devices, state.settings?.themDeviceId, youVal);
-        if (r) sel.value = r;
-      } else {
-        const r = resolveYouDeviceId(devices, state.settings?.youDeviceId, state.settings?.themDeviceId);
-        if (r) sel.value = r;
-      }
-    };
-    fill('wiz-you', false);
-    fill('wiz-them', true);
+      const r = resolveYouDeviceId(devices, state.settings?.youDeviceId);
+      if (r) sel.value = r;
+    }
   } catch (e) { console.warn('Wizard device list failed', e); }
 }
 
@@ -642,8 +647,7 @@ document.getElementById('wiz-test-btn')?.addEventListener('click', async () => {
 document.getElementById('wiz-sound-btn')?.addEventListener('click', async () => {
   stopWizTest();
   const you  = document.getElementById('wiz-you').value;
-  const them = document.getElementById('wiz-them').value;
-  await wizSave({ youDeviceId: you, themDeviceId: them, transcriptionMethod: 'local' });
+  await wizSave({ youDeviceId: you, transcriptionMethod: 'local' });
   wizShow(4);
 });
 document.getElementById('wiz-finish-btn')?.addEventListener('click', () => {
@@ -688,24 +692,10 @@ function applySettings(s) {
   // Device dropdowns are populated async by populateAudioDevices();
   // apply the saved picks once options exist.
   if (s.youDeviceId)  sid('s-you-device').value  = s.youDeviceId;
-  if (s.themDeviceId) sid('s-them-device').value = s.themDeviceId;
-  const themSourceSel = document.getElementById('s-them-source');
-  if (themSourceSel) themSourceSel.value = s.themSource || 'blackhole';
-  syncThemSourceUI();
   updatePills();
   checkAIConnection();
   populateModels();
 }
-
-// v3.6: with the System audio source, the call-audio DEVICE picker is
-// unused — disable it so the form can't imply it still matters.
-function syncThemSourceUI() {
-  const src = document.getElementById('s-them-source');
-  const dev = document.getElementById('s-them-device');
-  if (!src || !dev) return;
-  dev.disabled = src.value === 'system';
-}
-document.getElementById('s-them-source')?.addEventListener('change', syncThemSourceUI);
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
   const s = {
@@ -714,8 +704,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     transcriptionMethod: 'local',
     localModel:    document.getElementById('s-localmodel').value,
     youDeviceId:   document.getElementById('s-you-device').value,
-    themDeviceId:  document.getElementById('s-them-device').value,
-    themSource:    document.getElementById('s-them-source')?.value || 'blackhole',
     model:         document.getElementById('s-model').value,
     systemPrompt:  document.getElementById('s-system').value.trim(),
     hotkey:        document.getElementById('s-hotkey').value.trim(),
@@ -1240,18 +1228,15 @@ micBtn.addEventListener('click', async () => {
 
 // ─── LOCAL AUDIO CAPTURE (dual-track, on-device Whisper) ────────────────────
 // Track "you"  = your microphone (exact deviceId from Settings)
-// Track "them" = BlackHole / Loopback device carrying the call
-// Devices are enumerated here — Electron can pick an exact device,
-// which is the whole reason the Chrome Helper could be deleted.
-// v3.5.5: device-id resolution, shared by the Settings pickers, the
-// setup wizard and capture start. 'default' is Chromium's pseudo-device
-// for the system default input — in practice always the microphone. It
-// must never drive the Them track: both tracks then record the mic, the
-// user's own voice comes back labelled [Them], and the echo guard hides
-// the [You] copy. A saved Them id that is a placeholder, stale (device
-// gone), or identical to the You device is treated as unset and resolved
-// to a BlackHole/Loopback device when one exists. Explicit real choices
-// are always respected. (Function declarations, so boot order is safe.)
+// Track "them" = the Mac's system audio (ScreenCaptureKit, via main)
+// v3.5.5: device-id resolution for the microphone, shared by the
+// Settings picker, the setup wizard and capture start. 'default' is
+// Chromium's pseudo-device for the system default input. A saved id
+// that is a placeholder or stale (device gone) is treated as unset and
+// resolved to a real microphone. Virtual loopback devices (BlackHole
+// and friends) are never chosen AS the microphone — they carry call
+// audio, not the user's voice. Explicit real choices are respected.
+// (Function declarations, so boot order is safe.)
 function isCallDevice(d) { return /blackhole|loopback/i.test((d && d.label) || ''); }
 function isPlaceholderId(id) { return !id || id === 'default'; }
 
@@ -1265,8 +1250,8 @@ function fmtInputs(inputs) {
   return inputs.map(d => `${d.label || '(no label)'}#${String(d.deviceId || '').slice(0, 8)}`).join(' | ');
 }
 
-function resolveYouDeviceId(inputs, savedYou, themId) {
-  if (!isPlaceholderId(savedYou) && savedYou !== themId &&
+function resolveYouDeviceId(inputs, savedYou) {
+  if (!isPlaceholderId(savedYou) &&
       inputs.some(d => d.deviceId === savedYou)) return savedYou;
   // Prefer the physical device the 'default' pseudo-device stands for:
   // Chromium labels it "Default - <real label>" (hyphen or em dash).
@@ -1277,25 +1262,16 @@ function resolveYouDeviceId(inputs, savedYou, themId) {
     const m = /^Default\s*[-—–]\s*(.+)$/.exec(def.label);
     if (m) {
       const hit = inputs.find(d => d.deviceId !== 'default' && !isCallDevice(d) && (d.label || '') === m[1]);
-      if (hit && hit.deviceId !== themId) return hit.deviceId;
+      if (hit) return hit.deviceId;
     }
   }
   const builtin = inputs.find(d => !isCallDevice(d) && d.deviceId !== 'default' && /macbook|built[- ]?in/i.test(d.label || ''));
-  if (builtin && builtin.deviceId !== themId) return builtin.deviceId;
+  if (builtin) return builtin.deviceId;
   const real = inputs.find(d => !isCallDevice(d) && d.deviceId !== 'default');
   if (real) return real.deviceId;
   const any = inputs.find(d => !isCallDevice(d));
   return any ? any.deviceId : '';
 }
-
-function resolveThemDeviceId(inputs, savedThem, youId) {
-  if (!isPlaceholderId(savedThem) && savedThem !== youId &&
-      inputs.some(d => d.deviceId === savedThem)) return savedThem;
-  const call = inputs.find(isCallDevice);
-  return call ? call.deviceId : '';
-}
-
-let _noCallDeviceAdvised = false;
 
 async function populateAudioDevices() {
   try {
@@ -1305,10 +1281,9 @@ async function populateAudioDevices() {
       tmp.getTracks().forEach(t => t.stop());
     } catch (_) {}
     const inputs = await LocalCapture.listAudioInputs();
-    const beforeYou = state.settings.youDeviceId, beforeThem = state.settings.themDeviceId;
-    const youId  = resolveYouDeviceId(inputs, state.settings.youDeviceId, state.settings.themDeviceId);
-    const themId = resolveThemDeviceId(inputs, state.settings.themDeviceId, youId);
-    alog(`populate: inputs=[${fmtInputs(inputs)}] savedYou=${beforeYou || ''} savedThem=${beforeThem || ''} -> you=${youId || ''} them=${themId || ''}`);
+    const beforeYou = state.settings.youDeviceId;
+    const youId  = resolveYouDeviceId(inputs, state.settings.youDeviceId);
+    alog(`populate: inputs=[${fmtInputs(inputs)}] savedYou=${beforeYou || ''} -> you=${youId || ''}`);
     const fill = (selectId, resolvedId) => {
       const sel = document.getElementById(selectId);
       if (!sel) return;
@@ -1322,14 +1297,12 @@ async function populateAudioDevices() {
       sel.value = resolvedId || '';
     };
     fill('s-you-device', youId);
-    fill('s-them-device', themId);
-    // Persist the resolved picks — this also repairs placeholder or
-    // colliding saved ids the first time the panel is populated.
-    if (youId)  state.settings.youDeviceId  = youId;
-    if (themId) state.settings.themDeviceId = themId;
+    // Persist the resolved pick — this also repairs a placeholder or
+    // stale saved id the first time the panel is populated.
+    if (youId) state.settings.youDeviceId = youId;
     // v3.5.6: persist a repair to disk too, so the saved config matches
     // what capture will use (previously only capture start persisted).
-    if ((youId && youId !== beforeYou) || (themId && themId !== beforeThem)) {
+    if (youId && youId !== beforeYou) {
       try {
         const current = (await window.ghostmind.getSettings()) || {};
         await window.ghostmind.saveSettings({ ...current, ...state.settings });
@@ -1368,13 +1341,9 @@ async function prewarmTranscription() {
 async function ensureLocalCapture() {
   if (state.localCapture) return true;
   let youDeviceId  = state.settings.youDeviceId  || document.getElementById('s-you-device')?.value || '';
-  let themDeviceId = state.settings.themDeviceId || document.getElementById('s-them-device')?.value || '';
-  const themSource = state.settings.themSource || 'blackhole';
-  alog(`ensure: start you=${youDeviceId} them=${themDeviceId} themSource=${themSource}`);
-  // v3.5.5: resolve the saved ids against the devices that exist right
-  // now. This repairs the classic misconfiguration — both tracks left on
-  // 'default' (the microphone) — before it can label the user's own
-  // voice as [Them], and advises once when no call-audio device exists.
+  alog(`ensure: start you=${youDeviceId} (them = system audio)`);
+  // v3.5.5: resolve the saved mic id against the devices that exist
+  // right now, so a stale or placeholder id can't start a dead track.
   try {
     try {
       const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1382,23 +1351,12 @@ async function ensureLocalCapture() {
     } catch (_) {}
     const inputs = await LocalCapture.listAudioInputs();
     if (inputs.length) {
-      const rYou  = resolveYouDeviceId(inputs, youDeviceId, themDeviceId);
-      const rThem = themSource === 'system' ? '' : resolveThemDeviceId(inputs, themDeviceId, rYou);
-      alog(`ensure: inputs=[${fmtInputs(inputs)}] -> rYou=${rYou || ''} rThem=${rThem || ''}`);
+      const rYou  = resolveYouDeviceId(inputs, youDeviceId);
+      alog(`ensure: inputs=[${fmtInputs(inputs)}] -> rYou=${rYou || ''}`);
       if (rYou) youDeviceId = rYou;
-      if (rThem && rThem !== themDeviceId) {
-        const label = inputs.find(d => d.deviceId === rThem)?.label || rThem;
-        addMsg('system', `🎧 Call audio fixed: now using “${label}” for the other person's voice (it was set to your microphone, which labels your own voice as [Them]).`);
-        themDeviceId = rThem;
-      }
-      if (!rThem && themSource !== 'system' && !_noCallDeviceAdvised) {
-        _noCallDeviceAdvised = true;
-        addMsg('system', 'ℹ No call-audio device (BlackHole/Loopback) found — only your side of calls will be transcribed. Install BlackHole (free) and route the call through it; GhostMind will then pick it up automatically.');
-      }
-      // Remember the repaired ids so the fix sticks.
-      if (youDeviceId !== state.settings.youDeviceId || themDeviceId !== state.settings.themDeviceId) {
+      // Remember the repaired id so the fix sticks.
+      if (youDeviceId !== state.settings.youDeviceId) {
         state.settings.youDeviceId = youDeviceId;
-        state.settings.themDeviceId = themDeviceId;
         try {
           const current = (await window.ghostmind.getSettings()) || {};
           await window.ghostmind.saveSettings({ ...current, ...state.settings });
@@ -1406,17 +1364,15 @@ async function ensureLocalCapture() {
       }
     }
   } catch (_) {}
-  if (!youDeviceId && !themDeviceId && themSource !== 'system') {
-    addMsg('system', '⚠ No audio devices selected — pick your mic and your BlackHole/Loopback device in Settings first.');
+  if (!youDeviceId) {
+    addMsg('system', '⚠ No microphone selected — pick your mic in Settings first.');
     return false;
   }
   try {
     await window.ghostmind.startLocalTranscription();
-    if (themSource === 'system') {
-      const r = await window.ghostmind.startSysAudio();
-      if (r && r.ok === false) {
-        addMsg('system', '⚠ System audio could not start — only your side of the call will be transcribed. (Details in the audio debug log.)');
-      }
+    const rSys = await window.ghostmind.startSysAudio();
+    if (rSys && rSys.ok === false) {
+      addMsg('system', '⚠ System audio could not start — only your side of the call will be transcribed. (Details in the audio debug log.)');
     }
     const capture = new LocalCapture({
       sendSegment: (seg) => window.ghostmind.transcribeLocalSegment(seg),
@@ -1425,7 +1381,11 @@ async function ensureLocalCapture() {
         addMsg('system', `⚠ The ${speaker === 'you' ? 'microphone' : 'call-audio'} track failed to start (${e.name}). ${speaker === 'you' ? 'Your side will not be transcribed.' : 'Only your side will be transcribed.'}`);
       },
       onStream: (stream, speaker) => {
-        if (speaker !== 'them') return;
+        // v3.7: the [Them] track has no MediaStream anymore (it is fed
+        // from main), so the live waveform follows the microphone —
+        // the first stream to arrive wires the analyser.
+        if (state._waveWired) return;
+        state._waveWired = true;
         try {
           if (!state.audioContext) state.audioContext = new AudioContext();
           const src = state.audioContext.createMediaStreamSource(stream);
@@ -1437,7 +1397,7 @@ async function ensureLocalCapture() {
         } catch (_) {}
       },
     });
-    await capture.start({ youDeviceId, themDeviceId, themSource });
+    await capture.start({ youDeviceId });
     state.localCapture = capture;
     state.isCapturing = true;
     document.getElementById('capture-bar').classList.add('visible');
@@ -1459,6 +1419,7 @@ async function ensureLocalCapture() {
 
 async function stopLocalCapture() {
   if (state.localCapture) { try { state.localCapture.stop(); } catch (_) {} state.localCapture = null; }
+  state._waveWired = false;
   try { await window.ghostmind.stopLocalTranscription(); } catch (_) {}
   try { await window.ghostmind.stopSysAudio(); } catch (_) {}
   if (state.audioContext) { try { state.audioContext.close(); } catch (_) {} state.audioContext = null; }

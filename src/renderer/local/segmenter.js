@@ -10,7 +10,7 @@
 //
 // One Segmenter per speaker track. Tracks never mix — that is what gives
 // GhostMind speaker labels for free: track "you" = mic, track "them" =
-// system / BlackHole / Loopback feed.
+// the Mac's system audio feed.
 
 class Segmenter {
   constructor(opts = {}) {

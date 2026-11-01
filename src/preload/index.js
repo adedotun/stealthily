@@ -47,8 +47,8 @@ contextBridge.exposeInMainWorld('ghostmind', {
   stopLocalTranscription:  ()        => ipcRenderer.invoke('local-transcription-stop'),
   transcribeLocalSegment:  (segment) => ipcRenderer.invoke('transcribe-local-segment', segment),
 
-  // ── System audio (v3.6, ScreenCaptureKit — the [Them] track with no
-  // BlackHole). PCM frames and status arrive on the on() channels below.
+  // ── System audio (ScreenCaptureKit — the [Them] track). PCM frames
+  // and status arrive on the on() channels below.
   startSysAudio:           ()        => ipcRenderer.invoke('sysaudio-start'),
   stopSysAudio:            ()        => ipcRenderer.invoke('sysaudio-stop'),
 
