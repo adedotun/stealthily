@@ -1181,6 +1181,45 @@ body:not(.call-active) #quick-bar { display: none; }
   background: var(--bg3); border: 1px solid var(--line2); border-bottom-width: 2px;
   border-radius: 6px; padding: 2px 7px;
 }
+
+/* ═══ v3.11 TRANSCRIPT REDESIGN ═══ */
+#live-partial { display: none !important; }
+#transcript-bar { position: relative; }
+#transcript-scroll .t-line .t-name {
+  display: block;
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin-bottom: 2px;
+}
+#transcript-scroll .t-line { line-height: 1.45; }
+.t-live { font-style: italic; animation: gmTailPulse 1.6s ease-in-out infinite; }
+.t-live::after { content: ' …'; }
+@keyframes gmTailPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.72; } }
+#listen-strip {
+  display: none; align-items: center; gap: 8px;
+  padding: 6px 12px; border-bottom: 1px solid var(--line);
+  font-size: 11px; color: var(--text);
+}
+#transcript-bar.listening #listen-strip { display: flex; }
+#ls-dot { width: 7px; height: 7px; border-radius: 50%; background: #3ddc84; box-shadow: 0 0 6px #3ddc84; animation: gmTailPulse 1.6s ease-in-out infinite; flex: none; }
+#ls-label { white-space: nowrap; }
+#ls-time { color: var(--muted2); font-variant-numeric: tabular-nums; }
+.ls-meter-wrap { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; }
+.ls-meter-wrap + .ls-meter-wrap { margin-left: 10px; }
+.ls-meter-name { font-size: 9.5px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted2); }
+.ls-meter { width: 54px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.12); overflow: hidden; display: inline-block; }
+.ls-meter i { display: block; height: 100%; width: 0%; background: var(--acid); border-radius: 2px; transition: width 120ms linear; }
+#ls-you { background: var(--blue); }
+#live-pill {
+  position: absolute; right: 12px; bottom: 10px; z-index: 5;
+  display: none; padding: 4px 10px; border-radius: 999px;
+  background: var(--cb, #2f6bff); color: #fff; border: none;
+  font-size: 11px; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+#live-pill.show { display: block; }
+
 </style>
 </head>
 <body>
@@ -1315,10 +1354,18 @@ body:not(.call-active) #quick-bar { display: none; }
       <span>Live transcript</span>
       <button style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:11px;" id="transcript-toggle-btn">Hide</button>
     </div>
+    <div id="listen-strip">
+      <span id="ls-dot"></span>
+      <span id="ls-label">Listening</span>
+      <span id="ls-time">00:00</span>
+      <span class="ls-meter-wrap"><span class="ls-meter-name">You</span><span class="ls-meter"><i id="ls-you"></i></span></span>
+      <span class="ls-meter-wrap"><span class="ls-meter-name">Caller</span><span class="ls-meter"><i id="ls-them"></i></span></span>
+    </div>
     <div id="live-summary" style="display:none; padding:7px 12px; font-size:12px; line-height:1.5; color:var(--text); background:var(--acid-dim); border-bottom:1px solid var(--line);"></div>
     <div id="live-partial" style="display:none; padding:6px 12px; font-size:12.5px; font-style:italic; opacity:0.55; border-bottom:1px solid var(--line);"></div>
     <div id="suggest-chips"></div>
     <div id="transcript-scroll"></div>
+    <button id="live-pill">↓ Live</button>
   </div>
 
   <!-- PANEL: CHAT -->

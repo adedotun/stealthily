@@ -130,16 +130,11 @@ function echoVerdict(line) {
     for (let i = recentYouLines.length - 1; i >= 0; i--) {
       const y = recentYouLines[i];
       if (echoSim(text, y.text) >= 0.65) {
-        // Relabel the echo in place: stored line, bubble class/name/text,
-        // and the plain-text mirror in the Audio panel.
+        // Relabel the echo in place: stored line, its sentence span
+        // (v3.11 turns hold one .t-sent span per sentence), and the
+        // plain-text mirror in the Audio panel.
         state.transcript[y.idx] = line;
-        if (y.el) {
-          y.el.classList.remove('you');
-          y.el.classList.add('them');
-          const name = y.el.querySelector('.t-name');
-          if (name) name.textContent = 'Caller';
-          if (y.el.childNodes[1]) y.el.childNodes[1].textContent = text;
-        }
+        if (y.sentEl && y.sentEl.isConnected) gmRelabelSentence(y, text);
         const all = document.getElementById('transcript-all');
         if (all && y.raw) all.textContent = all.textContent.replace(y.raw, line);
         recentYouLines.splice(i, 1);
@@ -156,20 +151,14 @@ window.ghostmind.on('external-transcript', ({ line, partial, speaker }) => {
   // v3.2 live partials: provisional words for an utterance still being
   // spoken — shown dimmed in the transcript bar, never stored, and
   // cleared when the final segment for that speaker lands.
-  const partialEl = document.getElementById('live-partial');
+  // v3.11: the partial is a faded tail inside the speaker's open turn
+  // (gmShowLiveTail), not a detached line; the final clears it.
   if (partial) {
-    if (partialEl) {
-      partialEl.textContent = line + ' …';
-      partialEl.dataset.speaker = speaker || '';
-      partialEl.style.display = 'block';
-      document.getElementById('transcript-bar').classList.add('visible');
-    }
+    gmShowLiveTail(line, speaker);
+    document.getElementById('transcript-bar').classList.add('visible');
     return;
   }
-  if (partialEl && partialEl.dataset.speaker === (speaker || '')) {
-    partialEl.style.display = 'none';
-    partialEl.textContent = '';
-  }
+  gmClearLiveTail(speaker);
 
   // Dictation mode (mic button): your own lines go to the chat input
   // instead of the call transcript, and auto-send when you stop.
@@ -199,7 +188,7 @@ window.ghostmind.on('external-transcript', ({ line, partial, speaker }) => {
     state.transcript.push(line);
     const el = addTranscriptLine(line);
     if (line.startsWith('[You]')) {
-      recentYouLines.push({ text: line.replace(/^\[You\]\s*/, ''), raw: line, el, idx: state.transcript.length - 1, t: Date.now() });
+      recentYouLines.push({ text: line.replace(/^\[You\]\s*/, ''), raw: line, el, sentEl: el && el.__sent ? el.__sent : null, idx: state.transcript.length - 1, t: Date.now() });
       if (recentYouLines.length > 6) recentYouLines.shift();
     }
   }
@@ -1585,25 +1574,47 @@ function handleTranscriptLine(line) {
 function addTranscriptLine(line) {
   const scroll = document.getElementById('transcript-scroll');
   const all    = document.getElementById('transcript-all');
-  const p      = document.createElement('p');
-  // Friendly chat bubbles (v3.0): "[You] …" → You, "[Them] …" → Caller.
-  // The raw line is still what gets stored/copied — only the display changes.
+  // Friendly turns (v3.0; merged in v3.11): "[You] …" -> You,
+  // "[Them] …" -> Caller. The raw line is still what gets stored and
+  // copied — only the display changes. Consecutive lines from one
+  // speaker within 25 s flow into the open turn as sentence spans.
   const you  = line.startsWith('[You]');
   const them = line.startsWith('[Them]');
+  let p = null;
   if (you || them) {
-    p.className = 't-line new ' + (you ? 'you' : 'them');
-    const name = document.createElement('span');
-    name.className = 't-name';
-    name.textContent = you ? 'You' : 'Caller';
-    p.appendChild(name);
-    p.appendChild(document.createTextNode(line.replace(/^\[(You|Them)\]\s*/, '')));
+    const spk = you ? 'you' : 'them';
+    const text = line.replace(/^\[(You|Them)\]\s*/, '');
+    const now = Date.now();
+    const sent = document.createElement('span');
+    sent.className = 't-sent';
+    sent.textContent = text;
+    if (gmTurn && gmTurn.spk === spk && gmTurn.el.isConnected
+        && !gmTurn.el.dataset.live
+        && now - gmTurn.t < 25000
+        && scroll.lastElementChild === gmTurn.el) {
+      p = gmTurn.el;
+      const box = p.querySelector('.t-text');
+      box.appendChild(document.createTextNode(' '));
+      box.appendChild(sent);
+      gmTurn.t = now;
+    } else {
+      p = gmMakeTurn(spk, false);
+      p.classList.add('new');
+      p.querySelector('.t-text').appendChild(sent);
+      scroll.appendChild(p);
+      gmTurn = { spk, el: p, t: now };
+      setTimeout(() => p.classList.remove('new'), 800);
+    }
+    p.__sent = sent;
   } else {
+    p = document.createElement('p');
     p.className  = 't-line new';
     p.textContent = line;
+    scroll.appendChild(p);
+    gmTurn = null;
+    setTimeout(() => p.classList.remove('new'), 800);
   }
-  scroll.appendChild(p);
-  scroll.scrollTop = scroll.scrollHeight;
-  setTimeout(() => p.classList.remove('new'), 800);
+  gmScrollFollow(scroll);
 
   if (all) {
     all.textContent += (all.textContent ? '\n' : '') + line;
@@ -1962,4 +1973,153 @@ initStealthCursor();
       || wizOpen;
     if (!busy && panel === 'chat' && Date.now() - lastActivity > 90000) setCollapsed(true);
   }, 5000);
+})();
+
+// ═══ v3.11 TRANSCRIPT REDESIGN ═══════════════════════════════════════
+// Turn merging (one speaker's consecutive lines flow into one turn),
+// the live partial as a faded tail inside the speaker's open turn
+// instead of a detached line, smart auto-scroll with a "↓ Live" pill,
+// and the listening strip (state + live level meters fed by
+// __gmLevels from capture.js). Echo suppression (v3.8.1) works per
+// sentence: each sentence is its own .t-sent span, so a merged turn
+// can still hand a single echoed sentence over to the Caller.
+let gmTurn = null;   // { spk, el, t } — the currently open turn
+let gmTail = null;   // { spk, turn, span } — the live partial tail
+
+function gmSpkOfLine(line) {
+  if (line.startsWith('[You]')) return 'you';
+  if (line.startsWith('[Them]')) return 'them';
+  return null;
+}
+
+function gmMakeTurn(spk, provisional) {
+  const p = document.createElement('p');
+  p.className = 't-line ' + spk;
+  if (provisional) p.dataset.live = '1';
+  const name = document.createElement('span');
+  name.className = 't-name';
+  name.textContent = spk === 'you' ? 'You' : 'Caller';
+  const box = document.createElement('span');
+  box.className = 't-text';
+  p.appendChild(name);
+  p.appendChild(box);
+  return p;
+}
+
+function gmShowLiveTail(line, speaker) {
+  const spk = gmSpkOfLine(line) || (speaker === 'you' ? 'you' : speaker === 'them' ? 'them' : null);
+  if (!spk) return;
+  const text = line.replace(/^\[(You|Them)\]\s*/, '');
+  const scroll = document.getElementById('transcript-scroll');
+  if (!scroll) return;
+  if (gmTail && gmTail.spk !== spk) gmClearLiveTail(gmTail.spk);
+  if (gmTail && gmTail.spk === spk && gmTail.span.isConnected) {
+    gmTail.span.textContent = (gmTail.turn.querySelectorAll('.t-sent').length ? ' ' : '') + text;
+    gmScrollFollow(scroll);
+    return;
+  }
+  let turn = (gmTurn && gmTurn.spk === spk && gmTurn.el.isConnected && scroll.lastElementChild === gmTurn.el) ? gmTurn.el : null;
+  if (!turn) {
+    turn = gmMakeTurn(spk, true);
+    scroll.appendChild(turn);
+  }
+  const span = document.createElement('span');
+  span.className = 't-live';
+  span.textContent = (turn.querySelectorAll('.t-sent').length ? ' ' : '') + text;
+  turn.querySelector('.t-text').appendChild(span);
+  gmTail = { spk, turn, span };
+  gmScrollFollow(scroll);
+}
+
+function gmClearLiveTail(speaker) {
+  if (!gmTail) return;
+  const spk = speaker === 'you' ? 'you' : speaker === 'them' ? 'them' : null;
+  if (spk && gmTail.spk !== spk) return;
+  const turn = gmTail.turn, span = gmTail.span;
+  gmTail = null;
+  if (span) span.remove();
+  if (turn && turn.dataset.live && !turn.querySelector('.t-sent')) turn.remove();
+}
+
+// Move one echoed sentence out of a You turn into a Caller turn.
+function gmRelabelSentence(y, text) {
+  const turn = y.el, sent = y.sentEl;
+  if (!turn || !sent) return;
+  const sents = turn.querySelectorAll('.t-sent');
+  if (sents.length <= 1) {
+    turn.classList.remove('you');
+    turn.classList.add('them');
+    const name = turn.querySelector('.t-name');
+    if (name) name.textContent = 'Caller';
+    sent.textContent = text;
+    if (gmTurn && gmTurn.el === turn) gmTurn = null;
+    return;
+  }
+  const nt = gmMakeTurn('them', false);
+  const ns = document.createElement('span');
+  ns.className = 't-sent';
+  ns.textContent = text;
+  nt.querySelector('.t-text').appendChild(ns);
+  sent.remove();
+  turn.after(nt);
+  if (gmTurn && gmTurn.el === turn) gmTurn.t = 0;
+}
+
+function gmScrollFollow(scroll) {
+  const gap = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight;
+  if (gap < 140) {
+    scroll.scrollTop = scroll.scrollHeight;
+    gmHideLivePill();
+  } else {
+    gmShowLivePill();
+  }
+}
+function gmShowLivePill() { const b = document.getElementById('live-pill'); if (b) b.classList.add('show'); }
+function gmHideLivePill() { const b = document.getElementById('live-pill'); if (b) b.classList.remove('show'); }
+
+(function initV311() {
+  const scroll = document.getElementById('transcript-scroll');
+  const pill = document.getElementById('live-pill');
+  if (pill && scroll) {
+    pill.addEventListener('click', () => {
+      scroll.scrollTop = scroll.scrollHeight;
+      gmHideLivePill();
+    });
+  }
+  if (scroll) {
+    scroll.addEventListener('scroll', () => {
+      const gap = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight;
+      if (gap < 60) gmHideLivePill();
+    }, { passive: true });
+  }
+  // Listening strip: visible while capture is live; the clock runs
+  // from when it appears; meters follow __gmLevels with decay.
+  const bar = document.getElementById('transcript-bar');
+  const capBar = document.getElementById('capture-bar');
+  const timeEl = document.getElementById('ls-time');
+  const labelEl = document.getElementById('ls-label');
+  const youEl = document.getElementById('ls-you');
+  const themEl = document.getElementById('ls-them');
+  let stripStart = 0;
+  const disp = { you: 0, them: 0 };
+  setInterval(() => {
+    if (!bar || !capBar) return;
+    const active = capBar.classList.contains('visible') && bar.classList.contains('visible');
+    bar.classList.toggle('listening', active);
+    if (!active) { stripStart = 0; return; }
+    if (!stripStart) stripStart = Date.now();
+    if (timeEl) {
+      const s = Math.floor((Date.now() - stripStart) / 1000);
+      timeEl.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    }
+    if (labelEl) labelEl.textContent = state.transcript.length ? 'Listening' : 'Listening — waiting for speech';
+    const L = globalThis.__gmLevels || {};
+    const now = performance.now();
+    for (const k of ['you', 'them']) {
+      const fresh = L[k] && (now - L[k].t) < 350 ? L[k].v : 0;
+      disp[k] = Math.max(fresh, disp[k] * 0.72);
+      const el = k === 'you' ? youEl : themEl;
+      if (el) el.style.width = Math.round(disp[k] * 100) + '%';
+    }
+  }, 150);
 })();

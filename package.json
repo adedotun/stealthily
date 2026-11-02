@@ -91,5 +91,5 @@
     "test": "playwright test",
     "test:local": "node --test tests-local/*.test.js"
   },
-  "version": "3.10.1"
+  "version": "3.11.0"
 }

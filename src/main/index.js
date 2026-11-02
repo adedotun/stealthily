@@ -367,6 +367,10 @@ function createWindow() {
     transparent:         true,    // true transparency
     vibrancy:            'under-window', // v3.8: Cluely-style frosted glass (macOS)
     visualEffectState:   'active',
+    // v3.11: Windows gets its own glass — DWM acrylic behind the
+    // transparent window (Windows 11; silently ignored where the OS
+    // does not support it, leaving the CSS glass panels as they were).
+    ...(process.platform === 'win32' ? { backgroundMaterial: 'acrylic' } : {}),
     hasShadow:           true,
     alwaysOnTop:         true,
     skipTaskbar:         true,    // hidden from taskbar

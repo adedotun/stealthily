@@ -86,6 +86,20 @@ class LocalCapture {
       },
     });
     segmenter.startedAtMs = performance.now();
+    // v3.11: publish a live level per track for the listening strip.
+    // Both feed paths (mic worklet, system-audio frames) funnel through
+    // segmenter.push, so wrapping it here covers every track.
+    const origPush = segmenter.push.bind(segmenter);
+    segmenter.push = (frame) => {
+      try {
+        let sum = 0;
+        for (let i = 0; i < frame.length; i += 4) sum += frame[i] * frame[i];
+        const rms = Math.sqrt(sum / Math.max(1, Math.ceil(frame.length / 4)));
+        const L = (globalThis.__gmLevels = globalThis.__gmLevels || {});
+        L[speaker] = { v: Math.min(1, rms * 3.2), t: performance.now() };
+      } catch (_) {}
+      return origPush(frame);
+    };
     return segmenter;
   }
 

@@ -13,6 +13,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.9:** declutter — everything folds away until it is needed: auto-collapse to just the bar + Ask box when idle, status in a popover, contextual quick actions, captures as attachments, two-level Settings, a model pill beside Submit, and a keyboard-shortcut sheet — see [What changed in v3.9](#what-changed-in-v39).
 **v3.10:** Windows reaches full parity — a WASAPI loopback helper gives Windows the same driver-free call audio as macOS, CI verifies the whole Windows model (sidecar, helper, install, first launch), and the installer no longer demands admin rights — see [What changed in v3.10](#what-changed-in-v310).
 **v3.10.1:** macOS floor fix — the call-audio helper was accidentally built requiring macOS 27; it now targets macOS 13 (Ventura), so the full app runs on macOS 13 and later — see [What changed in v3.10.1](#what-changed-in-v3101).
+**v3.11:** Windows gets real acrylic glass, and transcription is redesigned — merged speaker turns, an in-place live tail, a listening strip with live level meters, and auto-scroll that respects reading — see [What changed in v3.11](#what-changed-in-v311).
 
 ---
 
@@ -245,6 +246,14 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.11
+
+- **Windows gets the glass.** The frosted look on macOS comes from system vibrancy, which Windows ignores — the Windows window was plain transparent with nothing for the panels' blur to bite on. The main window now requests DWM **acrylic** (`backgroundMaterial`) on Windows, so Windows 11 renders real frosted glass behind the app, matching the Mac feel. Where the OS does not support it, it is silently ignored and the previous look remains.
+- **Transcription, redesigned.** Consecutive lines from the same speaker now **merge into one turn** (a new bubble only on a speaker change or a 25-second pause) instead of one bubble per sentence. The live “still speaking” text is a **faded tail inside the speaker's open turn** that solidifies in place when the final lands, replacing the detached jumping line. Speaker names became small captions above each turn.
+- **A listening strip** sits at the top of the transcript while capturing: a pulsing dot, the session clock, and **live level meters for You and Caller** (fed by the capture pipeline itself), so you can see GhostMind hearing both sides.
+- **Auto-scroll respects reading.** The transcript only follows new lines while you are at the bottom; scroll up and it stays put, offering a **↓ Live** pill to jump back.
+- Echo suppression (v3.8.1) is sentence-aware now: each sentence is its own span inside a merged turn, so an echoed sentence can still be dropped or handed to the Caller without touching the rest of the turn.
 
 ## What changed in v3.10.1
 
