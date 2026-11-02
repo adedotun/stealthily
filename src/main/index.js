@@ -284,6 +284,11 @@ function resolveBundledEngine() {
 // Packaged: extraResources puts it at process.resourcesPath/sysaudio/.
 // Dev: the locally built copy in the repo tree (native/system-audio/build.sh).
 function resolveSysAudioHelper() {
+  // System-audio capture is macOS-only (ScreenCaptureKit). On Windows the
+  // helper file may still be packaged, but it is a Mach-O binary — never
+  // resolve it there, so the app reports the honest helper-missing state
+  // (WASAPI loopback is future work).
+  if (process.platform !== 'darwin') return null;
   const candidates = [
     path.join(process.resourcesPath || '', 'sysaudio', 'sysaudio'),
     path.join(__dirname, '..', '..', 'native', 'system-audio', 'build', 'sysaudio'),
