@@ -11,6 +11,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.4:** trust + polish — the app now verifies itself (truthful AI status, live model list, one-tap health check), transcription got smarter (Silero filtering, pre-roll, echo guard), and the call experience gained compact mode, live suggestion chips, session export, and ask-my-past-sessions — see [What changed in v3.4](#what-changed-in-v34).
 **v3.5:** fixes from the first real-world test pass — multi-snapshot snipes (queue several captures, send them together), a dead Settings toggle repaired, and transcription that can no longer fail silently: engine errors surface in the chat, the Silero filter fails safe, and a slow first-run model download says so — see [What changed in v3.5](#what-changed-in-v35).
 **v3.9:** declutter — everything folds away until it is needed: auto-collapse to just the bar + Ask box when idle, status in a popover, contextual quick actions, captures as attachments, two-level Settings, a model pill beside Submit, and a keyboard-shortcut sheet — see [What changed in v3.9](#what-changed-in-v39).
+**v3.10:** Windows reaches full parity — a WASAPI loopback helper gives Windows the same driver-free call audio as macOS, CI verifies the whole Windows model (sidecar, helper, install, first launch), and the installer no longer demands admin rights — see [What changed in v3.10](#what-changed-in-v310).
 
 ---
 
@@ -243,6 +244,10 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.10
+
+Windows parity. GhostMind's [Them] call-audio track was macOS-only (ScreenCaptureKit); v3.10 adds a Windows WASAPI loopback helper (`native/system-audio-win`, C# + NAudio, self-contained — no .NET runtime needed on the target PC) that emits the identical framed-PCM stream, so the app cannot tell the platforms apart. The main process resolves the right helper per platform, with a plain-language error when no playback device exists. The Windows release workflow now builds everything on a Windows runner and proves it before attaching the installer: the Whisper sidecar transcribes a speech fixture, the loopback helper's frame stream is validated, and the packaged app passes a silent install + first-launch test with both helpers confirmed inside the install. The Windows installer also drops its administrator requirement (per-user install). The one remaining gap on both platforms is a paid code-signing certificate (Gatekeeper/SmartScreen first-launch warnings until then) — a purchase, not code.
 
 ## What changed in v3.9
 
