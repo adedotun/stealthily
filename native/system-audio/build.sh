@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")"
 mkdir -p build
-swiftc -O main.swift -o build/sysaudio \
+swiftc -O main.swift -o build/sysaudio -target arm64-apple-macos13.0 \
   -framework ScreenCaptureKit -framework AVFoundation \
   -framework CoreMedia -framework CoreGraphics
 IDENTITY=$(security find-identity -v -p codesigning | grep 'Apple Development' | head -1 | sed -E 's/^.*"(.*)".*$/\1/')

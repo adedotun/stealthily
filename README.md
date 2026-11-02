@@ -12,6 +12,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.5:** fixes from the first real-world test pass — multi-snapshot snipes (queue several captures, send them together), a dead Settings toggle repaired, and transcription that can no longer fail silently: engine errors surface in the chat, the Silero filter fails safe, and a slow first-run model download says so — see [What changed in v3.5](#what-changed-in-v35).
 **v3.9:** declutter — everything folds away until it is needed: auto-collapse to just the bar + Ask box when idle, status in a popover, contextual quick actions, captures as attachments, two-level Settings, a model pill beside Submit, and a keyboard-shortcut sheet — see [What changed in v3.9](#what-changed-in-v39).
 **v3.10:** Windows reaches full parity — a WASAPI loopback helper gives Windows the same driver-free call audio as macOS, CI verifies the whole Windows model (sidecar, helper, install, first launch), and the installer no longer demands admin rights — see [What changed in v3.10](#what-changed-in-v310).
+**v3.10.1:** macOS floor fix — the call-audio helper was accidentally built requiring macOS 27; it now targets macOS 13 (Ventura), so the full app runs on macOS 13 and later — see [What changed in v3.10.1](#what-changed-in-v3101).
 
 ---
 
@@ -244,6 +245,11 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.10.1
+
+- **Fixed: the macOS build now runs on macOS 13 (Ventura) and later.** The ScreenCaptureKit system-audio helper had been compiled on macOS 27 with no deployment target, so the binary itself refused to run on anything older and call audio silently died on macOS 13–26 — the app shell (Electron) was fine at 12 all along. The helper is now built with an explicit `arm64-apple-macos13.0` target (13 is ScreenCaptureKit audio's own floor), the one macOS-15-only setting is availability-guarded, and the app declares `minimumSystemVersion: 13.0` so the promise is honest. Verified: helper binary reports minos 13.0, captures with a strong signal, and the installed app declares 13.0.
+- Windows is unchanged in this release — the v3.10.0 `GhostMind.exe` is attached here as-is so the download links keep working.
 
 ## What changed in v3.10
 

@@ -175,7 +175,11 @@ Task {
         cfg.capturesAudio = true
         cfg.sampleRate = 48000
         cfg.channelCount = 2
-        cfg.excludesCurrentProcessAudio = true
+        // excludesCurrentProcessAudio arrived in macOS 15; on 13/14 the mix
+        // simply includes our own process (which plays no audio anyway).
+        if #available(macOS 15.0, *) {
+            cfg.excludesCurrentProcessAudio = true
+        }
         let stream = SCStream(filter: filter, configuration: cfg, delegate: collector)
         try stream.addStreamOutput(collector, type: .audio, sampleHandlerQueue: DispatchQueue(label: "gm.sysaudio"))
         try await stream.startCapture()
