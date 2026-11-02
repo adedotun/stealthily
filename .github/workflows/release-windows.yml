@@ -1,8 +1,9 @@
 name: Build Windows installer
 
-# Builds the Windows (NSIS) installer on a real Windows runner — including
-# the bundled Whisper sidecar, which must be compiled on Windows — and
-# attaches GhostMind.exe + latest.yml to an existing GitHub release.
+# Builds the complete Windows model on a real Windows runner: the Whisper
+# sidecar AND the WASAPI loopback system-audio helper are compiled there
+# (neither can be cross-built), smoke-tested, packaged with NSIS, given a
+# silent install + first-launch test, and attached to an existing release.
 # Trigger manually from the Actions tab (or `gh workflow run`).
 
 on:
@@ -11,7 +12,7 @@ on:
       tag:
         description: 'Existing release tag to attach the installer to'
         required: true
-        default: 'v3.9.0'
+        default: 'v3.10.0'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -36,6 +37,11 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
       - name: Build the Whisper sidecar (bundled transcription engine)
         shell: pwsh
         run: |
@@ -44,11 +50,56 @@ jobs:
           sidecar/.venv/Scripts/pyinstaller --noconfirm --distpath sidecar/bin --workpath build/pyi-work sidecar/ghostmind-whisper.spec
           Get-ChildItem sidecar/bin
 
+      - name: Smoke-test the sidecar engine
+        shell: pwsh
+        run: |
+          python native/system-audio-win/test/make-tone.py build/tone.wav
+          $out = & sidecar/bin/ghostmind-whisper.exe --file build/tone.wav
+          Write-Host $out
+          $j = $out | ConvertFrom-Json
+          if ($null -eq $j.text) { throw 'sidecar returned no text field' }
+          if (Test-Path native/system-audio-win/test/speech.wav) {
+            $out2 = & sidecar/bin/ghostmind-whisper.exe --file native/system-audio-win/test/speech.wav
+            Write-Host $out2
+            $j2 = $out2 | ConvertFrom-Json
+            if ([string]::IsNullOrWhiteSpace($j2.text)) { throw 'sidecar transcribed silence from a speech fixture' }
+          }
+
+      - name: Build the system-audio helper (WASAPI loopback)
+        shell: pwsh
+        run: dotnet publish native/system-audio-win/sysaudio-win.csproj -c Release -o native/system-audio-win/publish
+
+      - name: Smoke-test the loopback helper
+        shell: pwsh
+        run: |
+          $play = Start-Process powershell -ArgumentList '-c', "(New-Object Media.SoundPlayer 'build/tone.wav').PlaySync()" -PassThru
+          $hp = Start-Process native/system-audio-win/publish/sysaudio-win.exe -ArgumentList '--stream','--seconds','4' -RedirectStandardOutput build/frames.bin -RedirectStandardError build/helper.log -PassThru -Wait
+          Get-Content build/helper.log
+          if ($hp.ExitCode -eq 2) {
+            Write-Host '::warning::Runner has no playback device - loopback structure test skipped (helper reported NO_DEVICE cleanly).'
+            exit 0
+          }
+          if ($hp.ExitCode -ne 0) { throw "helper exited $($hp.ExitCode)" }
+          node native/system-audio-win/test/check-frames.js build/frames.bin 4
+
       - name: Install Dependencies
         run: npm ci
 
       - name: Build Windows installer
         run: npx electron-builder --win --publish never
+
+      - name: Smoke-test install + first launch
+        shell: pwsh
+        run: |
+          Start-Process dist/GhostMind.exe -ArgumentList '/S' -Wait
+          $appDir = "$env:LocalAppData\Programs\GhostMind"
+          if (-not (Test-Path "$appDir\GhostMind.exe")) { throw 'app did not install where expected' }
+          if (-not (Test-Path "$appDir\resources\sysaudio-win\sysaudio-win.exe")) { throw 'system-audio helper missing from install' }
+          if (-not (Test-Path "$appDir\resources\app.asar.unpacked\sidecar\bin\ghostmind-whisper.exe")) { throw 'whisper sidecar missing from install' }
+          $p = Start-Process "$appDir\GhostMind.exe" -PassThru
+          Start-Sleep -Seconds 12
+          if ($p.HasExited) { throw "app exited during first launch (code $($p.ExitCode))" }
+          Stop-Process -Id $p.Id -Force
 
       - name: Attach to the release
         shell: pwsh
