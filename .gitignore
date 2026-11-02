@@ -8,3 +8,7 @@ __pycache__/
 *.log
 .DS_Store
 backup-v2-2026-10-27/
+native/system-audio-win/bin/
+native/system-audio-win/obj/
+native/system-audio-win/publish/*
+!native/system-audio-win/publish/.gitkeep

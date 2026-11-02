@@ -1,0 +1,4 @@
+The published sysaudio-win.exe lands here (built by CI or dotnet publish).
+This placeholder keeps the directory present so electron-builder's
+extraResources source exists on macOS builds too, where the filter
+matches nothing and nothing is bundled.

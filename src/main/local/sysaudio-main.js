@@ -70,7 +70,9 @@ class SystemAudioCapture {
         return;
       }
       let message = `System audio capture stopped unexpectedly (exit ${code}).`;
-      if (/-3801|declined TCC|permission/i.test(this._stderrTail)) {
+      if (/NO_DEVICE/i.test(this._stderrTail)) {
+        message = 'No playback device found — call audio capture needs a default output device (speakers or headphones) that is not muted or disconnected.';
+      } else if (/-3801|declined TCC|permission/i.test(this._stderrTail)) {
         message = 'System audio needs the Screen & System Audio Recording permission — check System Settings → Privacy & Security → Screen & System Audio Recording and make sure GhostMind is switched on, then start listening again.';
       } else if (/STREAM STOPPED/i.test(this._stderrTail)) {
         message = 'macOS stopped the system audio stream. Start listening again to retry.';
