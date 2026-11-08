@@ -14,6 +14,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.10:** Windows reaches full parity — a WASAPI loopback helper gives Windows the same driver-free call audio as macOS, CI verifies the whole Windows model (sidecar, helper, install, first launch), and the installer no longer demands admin rights — see [What changed in v3.10](#what-changed-in-v310).
 **v3.10.1:** macOS floor fix — the call-audio helper was accidentally built requiring macOS 27; it now targets macOS 13 (Ventura), so the full app runs on macOS 13 and later — see [What changed in v3.10.1](#what-changed-in-v3101).
 **v3.11:** Windows gets real acrylic glass, and transcription is redesigned — merged speaker turns, an in-place live tail, a listening strip with live level meters, and auto-scroll that respects reading — see [What changed in v3.11](#what-changed-in-v311).
+**v3.11.1:** full-screen overlay fix — GhostMind now runs as an accessory (agent) app so its window joins other apps’ full-screen Spaces instead of vanishing — see [What changed in v3.11.1](#what-changed-in-v3111).
 
 ---
 
@@ -246,6 +247,11 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 - Screenshots are sent to Claude when you trigger Snipe, and — only if you enable proactive mode — by the screen watcher.
 
 ---
+
+## What changed in v3.11.1
+
+- **Fixed: GhostMind now overlays other apps in full screen.** The window had every standard setting (all-Spaces visibility, full-screen auxiliary, screen-saver z-order) — but it also passed `skipTransformProcessType: true`, which kept the app a regular process, and a regular app's windows cannot join another app's full-screen Space on modern macOS. GhostMind now runs with the **accessory (agent) activation policy**, matching its dockless design, and re-asserts its all-Spaces/full-screen presence on every show, since macOS can drop a window from a full-screen Space across hide/show cycles. This covers ordinary full-screen apps — browsers, Zoom/Teams, documents, video. (A few modes still sit above everything by design: Keynote/PowerPoint slideshow and proctoring software.)
+- Windows is unchanged in this release — the v3.11.0 `GhostMind.exe` is attached here as-is so the download links keep working.
 
 ## What changed in v3.11
 

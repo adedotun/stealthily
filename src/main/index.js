@@ -395,9 +395,16 @@ function createWindow() {
 
   // ── macOS: Visible in all Spaces and over fullscreen apps ───────────────
   if (process.platform === 'darwin') {
+    // v3.11.1: the accessory (agent) activation policy is what lets the
+    // window join OTHER apps' full-screen Spaces. The old code passed
+    // skipTransformProcessType: true, which kept GhostMind a regular
+    // app process — and a regular app's windows stay in its own Spaces
+    // on modern macOS, so the overlay silently vanished whenever
+    // another app went full screen. GhostMind is dockless by design,
+    // so the accessory policy is its natural state.
+    app.setActivationPolicy('accessory');
     mainWindow.setVisibleOnAllWorkspaces(true, {
       visibleOnFullScreen: true,
-      skipTransformProcessType: true,
     });
     // Prevent window from appearing in Mission Control
     app.dock.hide();
@@ -406,6 +413,16 @@ function createWindow() {
   // ── Windows: Additional WDA_EXCLUDEFROMCAPTURE via level ────────────────
   // alwaysOnTop with 'screen-saver' level gets the highest z-order
   mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+
+// v3.11.1: re-asserted on every show — macOS can drop a window from a
+// full-screen Space across hide/show cycles, so showing re-joins it.
+function assertOverlayPresence() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (process.platform === 'darwin') {
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+  mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+}
 
   // Clear cache to bypass any persistent Chromium caches
   if (mainWindow.webContents && mainWindow.webContents.session) {
@@ -471,6 +488,7 @@ function hideWindow() {
 
 function showWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
+  assertOverlayPresence();
   mainWindow.show();
   mainWindow.focus();
   isVisible = true;
@@ -1093,7 +1111,7 @@ app.whenReady().then(() => {
     const gotLock = app.requestSingleInstanceLock();
     if (!gotLock) { app.quit(); return; }
     app.on('second-instance', () => {
-      if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+      if (mainWindow) { assertOverlayPresence(); mainWindow.show(); mainWindow.focus(); }
     });
   }
 
