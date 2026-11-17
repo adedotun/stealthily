@@ -1151,6 +1151,11 @@ body { --cb: #2f6bff; background: transparent; }
 #update-btn { margin-top: 6px; }
 #update-btn.upd-ready { background: #2f6bff; color: #fff; border-color: #2f6bff; }
 #update-note { font-size: 11px; opacity: 0.75; margin-top: 6px; line-height: 1.45; }
+#update-banner { align-items: center; gap: 8px; margin: 8px 12px 0; padding: 8px 10px; border-radius: 10px; background: rgba(47,107,255,0.14); border: 1px solid rgba(47,107,255,0.45); font-size: 12px; }
+#update-banner-text { flex: 1; line-height: 1.4; }
+#update-banner-btn { background: #2f6bff; color: #fff; border: none; border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+#update-banner-btn:disabled { opacity: 0.6; cursor: default; }
+body.collapsed #update-banner { display: none !important; }
 #status-popover #pills-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 8px; }
 #collapse-caret {
   display: block; width: 8px; height: 8px; margin: auto;
@@ -1278,6 +1283,12 @@ body:not(.call-active) #quick-bar { display: none; }
     <button class="snipe-btn" id="popover-checks-btn">🩺 Run checks</button>
     <button class="snipe-btn" id="update-btn">🔄 Check for updates</button>
     <div id="update-note" style="display:none"></div>
+  </div>
+
+  <!-- UPDATE BANNER (v3.13.4) — lives outside the popover; appears only when an update exists -->
+  <div id="update-banner" style="display:none">
+    <span id="update-banner-text"></span>
+    <button id="update-banner-btn"></button>
   </div>
 
   <!-- TABBAR -->

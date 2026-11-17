@@ -18,6 +18,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.12.3:** the hide/show toggle is truly fixed — the show path was calling a helper that had been accidentally defined inside another function, so every show threw and aborted before the window could appear — see [What changed in v3.12.3](#what-changed-in-v3123).
 **v3.13:** the updater gets a face — a button in the status popover that checks, downloads, and restarts to install, with a dot on the status pill when an update is waiting — see [What changed in v3.13](#what-changed-in-v313).
 **v3.13.2:** macOS updates now actually install — the app applies the downloaded update itself instead of relying on the built-in installer that silently no-ops — see [What changed in v3.13.2](#what-changed-in-v3132).
+**v3.13.4:** the update steps out of the popover — whenever an update exists, a banner under the titlebar shows it with its own Download / Restart button — see [What changed in v3.13.4](#what-changed-in-v3134).
 
 ---
 
@@ -255,6 +256,11 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 - **Fixed: GhostMind now overlays other apps in full screen.** The window had every standard setting (all-Spaces visibility, full-screen auxiliary, screen-saver z-order) — but it also passed `skipTransformProcessType: true`, which kept the app a regular process, and a regular app's windows cannot join another app's full-screen Space on modern macOS. GhostMind now runs with the **accessory (agent) activation policy**, matching its dockless design, and re-asserts its all-Spaces/full-screen presence on every show, since macOS can drop a window from a full-screen Space across hide/show cycles. This covers ordinary full-screen apps — browsers, Zoom/Teams, documents, video. (A few modes still sit above everything by design: Keynote/PowerPoint slideshow and proctoring software.)
 - Windows is unchanged in this release — the v3.11.0 `GhostMind.exe` is attached here as-is so the download links keep working.
+
+## What changed in v3.13.4
+
+- **The update comes to you.** The updater button still lives in the status popover, but whenever an update is actually available, downloading, or ready to install, a slim banner now appears under the titlebar — outside the popover — with the state and its own action button (*Download* / *Restart to update*). When there is no update, the banner is simply not there, so the interface stays as decluttered as before. The popover button and the banner drive the same updater and stay in sync; the blue dot on the status pill remains as the at-a-glance signal, including when the window is collapsed to the bar (where the banner stays tucked away).
+
 
 ## What changed in v3.13.2
 
