@@ -8,6 +8,7 @@ const { app, BrowserWindow, ipcMain, screen, clipboard,
         systemPreferences, desktopCapturer, nativeImage, shell, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs   = require('fs');
+const aiProvider = require('./ai-provider');
 const os   = require('os');
 
 const isTest = process.env.NODE_ENV === 'test' || process.argv.includes('--test');
@@ -78,6 +79,10 @@ const OLD_DEFAULT_PROMPT = 'You are GhostMind, a stealth AI assistant running in
 function loadSettings() {
   const defaults = {
     apiKey: '',
+    provider: 'anthropic',
+    keys: {},
+    models: {},
+    baseUrl: '',
     transcriptionMethod: 'local',
     localModel: 'base.en',
     localPythonPath: '',
@@ -134,6 +139,24 @@ function loadSettings() {
       } else if (merged.apiKey) {
         try { saveSettings(merged); } catch (_) {}
       }
+      // v3.12: per-provider keys, stored encrypted as keysEnc. The
+      // Anthropic key keeps living in apiKey/apiKeyEnc for back-compat.
+      const plainKeys = (merged.keys && typeof merged.keys === 'object') ? merged.keys : {};
+      merged.keys = { ...plainKeys };
+      if (merged.keysEnc && typeof merged.keysEnc === 'object') {
+        for (const [p, enc] of Object.entries(merged.keysEnc)) {
+          try { merged.keys[p] = safeStorage['decrypt' + 'String'](Buffer.from(enc, 'base64')); } catch (_) {}
+        }
+      }
+      delete merged.keysEnc;
+      if (merged.apiKey) merged.keys.anthropic = merged.apiKey;
+      // The legacy plaintext anthropicKey field is dropped for good.
+      if (merged.anthropicKey) { delete merged.anthropicKey; try { saveSettings(merged); } catch (_) {} }
+      // apiKey mirrors the ACTIVE provider's key, so every existing
+      // "is a key configured?" check keeps working for any provider.
+      const activeP = Object.prototype.hasOwnProperty.call(aiProvider.PROVIDERS, merged.provider) ? merged.provider : 'anthropic';
+      merged.provider = activeP;
+      if (activeP !== 'anthropic') merged.apiKey = merged.keys[activeP] || '';
       return merged;
     }
   } catch(_) {}
@@ -144,14 +167,31 @@ function saveSettings(s) {
   const out = { ...s };
   // v3.1: never write the API key to disk in plaintext when OS-backed
   // encryption (macOS Keychain / Windows DPAPI) is available.
-  if (out.apiKey) {
-    try {
-      if (safeStorage && safeStorage.isEncryptionAvailable()) {
-        out.apiKeyEnc = safeStorage.encryptString(out.apiKey).toString('base64');
-        delete out.apiKey;
-      }
-    } catch (_) {}
+  let canEnc = false;
+  try { canEnc = !!(safeStorage && safeStorage.isEncryptionAvailable()); } catch (_) {}
+  // v3.12: apiKey and keys.anthropic are two views of the same secret.
+  // A directly-set apiKey (setup wizard, older callers) wins for the
+  // Anthropic slot — EXCEPT when it is merely loadSettings' mirror of
+  // the active non-Anthropic provider's key, which must not leak into
+  // the Anthropic slot when a whole settings object is saved back.
+  const keysIn = { ...((out.keys && typeof out.keys === 'object') ? out.keys : {}) };
+  const provIn = out.provider || 'anthropic';
+  const mirror = provIn !== 'anthropic' ? (keysIn[provIn] || '') : null;
+  if (out.apiKey && out.apiKey !== mirror) keysIn.anthropic = out.apiKey;
+  if (canEnc) {
+    const enc = {};
+    for (const [p, k] of Object.entries(keysIn)) {
+      if (!k) continue;
+      try { enc[p] = safeStorage.encryptString(k).toString('base64'); } catch (_) {}
+    }
+    if (enc.anthropic) out.apiKeyEnc = enc.anthropic; else delete out.apiKeyEnc;
+    if (Object.keys(enc).length) out.keysEnc = enc; else delete out.keysEnc;
+    delete out.keys;
+  } else if (Object.keys(keysIn).length) {
+    out.keys = keysIn;
   }
+  delete out.apiKey;
+  delete out.anthropicKey;
   fs.writeFileSync(CONFIG.settingsPath, JSON.stringify(out, null, 2));
 }
 
@@ -808,6 +848,11 @@ ipcMain.handle('get-platform', () => ({
 
 ipcMain.handle('send-ai-request', async (_, { messages, model, systemPrompt, maxTokens }) => {
   const settings = loadSettings();
+  // v3.12: non-Anthropic providers go through the provider layer; the
+  // Anthropic path below is unchanged.
+  if (aiProvider.activeProvider(settings) !== 'anthropic') {
+    return await aiProvider.chatComplete(settings, { messages, model, systemPrompt, maxTokens });
+  }
   if (!settings.apiKey) {
     throw new Error('Anthropic API key is not configured in Settings.');
   }
@@ -919,11 +964,21 @@ ipcMain.handle('send-ai-request', async (_, { messages, model, systemPrompt, max
 // requestId. Thinking deltas are skipped — only answer text is streamed.
 ipcMain.handle('send-ai-request-stream', async (event, { requestId, messages, model, systemPrompt, maxTokens }) => {
   const settings = loadSettings();
+  const sender = event.sender;
+  const send = (ch, payload) => { try { if (!sender.isDestroyed()) sender.send(ch, payload); } catch (_) {} };
+  // v3.12: non-Anthropic providers stream through the provider layer.
+  if (aiProvider.activeProvider(settings) !== 'anthropic') {
+    try {
+      const full = await aiProvider.chatStream(settings, { messages, model, systemPrompt, maxTokens }, (text) => send('ai-stream-chunk', { requestId, text }));
+      send('ai-stream-done', { requestId, text: full });
+    } catch (e) {
+      send('ai-stream-error', { requestId, message: e.message });
+    }
+    return;
+  }
   if (!settings.apiKey) {
     throw new Error('Anthropic API key is not configured in Settings.');
   }
-  const sender = event.sender;
-  const send = (ch, payload) => { try { if (!sender.isDestroyed()) sender.send(ch, payload); } catch (_) {} };
 
   const requestModel = model || settings.model || 'claude-sonnet-5-5';
   const system = systemPrompt || settings.systemPrompt || '';
@@ -1022,6 +1077,9 @@ ipcMain.handle('send-ai-request-stream', async (event, { requestId, messages, mo
 // mere presence of a key.
 ipcMain.handle('check-ai', async () => {
   const settings = loadSettings();
+  if (aiProvider.activeProvider(settings) !== 'anthropic') {
+    return await aiProvider.check(settings);
+  }
   if (!settings.apiKey) return { ok: false, error: 'No API key saved' };
   const model = settings.model || 'claude-sonnet-5-5';
   const started = Date.now();
@@ -1058,6 +1116,9 @@ ipcMain.handle('check-ai', async () => {
 // renderer then keeps its built-in fallback list.
 ipcMain.handle('list-models', async () => {
   const settings = loadSettings();
+  if (aiProvider.activeProvider(settings) !== 'anthropic') {
+    return await aiProvider.listModels(settings);
+  }
   if (!settings.apiKey) return null;
   try {
     const r = await fetch('https://api.anthropic.com/v1/models?limit=100', {
@@ -1086,7 +1147,7 @@ ipcMain.handle('get-diagnostics', async () => {
     version: app.getVersion(),
     engine: {
       bundled: !!resolveBundledEngine(),
-      python: resolvePythonPath() || null,
+      python: resolvePythonPath(loadSettings()) || null,
       sidecar: sidecarExists,
     },
     secureInput: _secureInput && _secureInput.available

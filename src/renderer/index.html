@@ -1325,6 +1325,7 @@ body:not(.call-active) #quick-bar { display: none; }
       <button class="input-btn" id="mic-btn" title="Voice input">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
       </button>
+      <button class="input-btn" id="new-session-btn" title="New session — clear this conversation so the AI forgets it and starts fresh (Cmd+Shift+N)">🧹</button>
       <select id="model-pill" title="Model — same setting as Settings → Model"></select>
       <button class="input-btn" id="send-btn">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -1433,8 +1434,21 @@ body:not(.call-active) #quick-bar { display: none; }
       <div class="setting-section">
         <div class="setting-section-title">AI Configuration</div>
         <div class="setting-row">
-          <label>Anthropic API Key</label>
+          <label>AI Provider</label>
+          <select id="s-provider">
+            <option value="anthropic">Claude (Anthropic)</option>
+            <option value="openai">OpenAI (GPT)</option>
+            <option value="gemini">Google (Gemini)</option>
+            <option value="custom">Custom — OpenAI-compatible (OpenRouter, Groq, Ollama...)</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label id="s-apikey-label">Anthropic API Key</label>
           <input type="password" id="s-apikey" placeholder="sk-ant-api03-...">
+        </div>
+        <div class="setting-row" id="s-baseurl-row" style="display:none;">
+          <label>Endpoint Base URL</label>
+          <input type="text" id="s-baseurl" placeholder="https://openrouter.ai/api/v1 — or http://localhost:11434/v1 for Ollama">
         </div>
         <div class="setting-row">
           <label>Local Whisper Model</label>
@@ -1640,6 +1654,7 @@ body:not(.call-active) #quick-bar { display: none; }
         <div><span>Snipe a screen region</span><kbd>⌘⇧S</kbd></div>
         <div><span>Capture the full screen</span><kbd>⌘⇧F</kbd></div>
         <div><span>Ask — focus the input</span><kbd>⌘⇧A</kbd></div>
+        <div><span>New session (AI forgets this chat)</span><kbd>⌘⇧N</kbd></div>
         <div><span>Send message</span><kbd>Enter</kbd></div>
         <div><span>New line in message</span><kbd>⇧Enter</kbd></div>
         <div><span>Quit GhostMind</span><kbd>⌃Q</kbd></div>

@@ -49,8 +49,10 @@ test.describe('GhostMind E2E Tests', () => {
     const logoName = window.locator('#logo-name');
     await expect(logoName).toHaveText('GhostMind');
 
-    const logoVersion = window.locator('#logo-version');
-    await expect(logoVersion).toHaveText('v3.5');
+    // (The old #logo-version element was removed in the v3.8 redesign;
+    // version truth now lives in the diagnostics surface.)
+    const diag = await window.evaluate(async () => window.ghostmind.getDiagnostics ? await window.ghostmind.getDiagnostics() : null);
+    expect(diag && diag.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   test('Preload script should expose the ghostmind API securely', async () => {

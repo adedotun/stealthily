@@ -15,6 +15,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.10.1:** macOS floor fix — the call-audio helper was accidentally built requiring macOS 27; it now targets macOS 13 (Ventura), so the full app runs on macOS 13 and later — see [What changed in v3.10.1](#what-changed-in-v3101).
 **v3.11:** Windows gets real acrylic glass, and transcription is redesigned — merged speaker turns, an in-place live tail, a listening strip with live level meters, and auto-scroll that respects reading — see [What changed in v3.11](#what-changed-in-v311).
 **v3.11.1:** full-screen overlay fix — GhostMind now runs as an accessory (agent) app so its window joins other apps’ full-screen Spaces instead of vanishing — see [What changed in v3.11.1](#what-changed-in-v3111).
+**v3.12:** use any AI — Claude, OpenAI, Gemini, or any OpenAI-compatible endpoint (OpenRouter, Groq, Ollama...) — plus a New Session button that clears the conversation so the AI starts fresh — see [What changed in v3.12](#what-changed-in-v312).
 
 ---
 
@@ -252,6 +253,14 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 - **Fixed: GhostMind now overlays other apps in full screen.** The window had every standard setting (all-Spaces visibility, full-screen auxiliary, screen-saver z-order) — but it also passed `skipTransformProcessType: true`, which kept the app a regular process, and a regular app's windows cannot join another app's full-screen Space on modern macOS. GhostMind now runs with the **accessory (agent) activation policy**, matching its dockless design, and re-asserts its all-Spaces/full-screen presence on every show, since macOS can drop a window from a full-screen Space across hide/show cycles. This covers ordinary full-screen apps — browsers, Zoom/Teams, documents, video. (A few modes still sit above everything by design: Keynote/PowerPoint slideshow and proctoring software.)
 - Windows is unchanged in this release — the v3.11.0 `GhostMind.exe` is attached here as-is so the download links keep working.
+
+## What changed in v3.12
+
+**Pick your AI provider.** Settings → AI Configuration gains an **AI Provider** switch: Claude (Anthropic), OpenAI (GPT), Google (Gemini), or a custom OpenAI-compatible endpoint — OpenRouter, Groq, Together, or a local Ollama / LM Studio server (no key needed for local servers). Each provider has its own encrypted key slot and model pick, the model list is fetched live from the active provider, and everything (chat, streaming, screenshot questions, summaries, copilot) works on all of them. The Claude path keeps its prompt caching and Deep Thinking. Transcription is unchanged — still fully local.
+
+**New Session (🧹).** A button beside the model picker — or Cmd+Shift+N — clears the running conversation, so the AI stops seeing its own earlier replies (including refusals it would otherwise keep repeating). The cleared conversation is auto-saved as a draft first; saved session summaries and the live call transcript are not touched.
+
+**Fixes.** The diagnostics handler could throw reading the Python path (now passes the saved settings); the stale end-to-end UI test was repaired and the full suite is green.
 
 ## What changed in v3.11
 

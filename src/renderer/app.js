@@ -280,7 +280,7 @@ async function updateLiveSummary() {
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: [{ role: 'user', content: state.transcript.slice(-40).join('\n') }],
-      model: 'claude-haiku-5-5',
+      model: gmSmallModel(),
       systemPrompt: 'Summarize this call transcript so far in ONE friendly sentence (max 25 words) starting with "So far:". Plain words, no preamble.',
       maxTokens: 90,
     });
@@ -299,7 +299,7 @@ async function generatePostCall() {
     const transcript = state.transcript.slice(-80).join('\n');
     const data = await window.ghostmind.sendAIRequest({
       messages: [{ role: 'user', content: transcript }],
-      model: state.settings.model || 'claude-sonnet-5-5',
+      model: gmModelFor(gmProvider()),
       systemPrompt: 'You are GhostMind. From the call transcript, reply with exactly two sections headed "SUMMARY" and "EMAIL". SUMMARY: 3-5 short bullet lines (decisions, key points, action items with owners). EMAIL: a short, warm follow-up email the user could send (subject line first, then 3-5 sentences, sign off as the user). Plain language. No other text.',
       maxTokens: 700,
     });
@@ -416,9 +416,18 @@ async function populateModels() {
   const sel = document.getElementById('s-model');
   if (!sel) return;
   try {
-    const models = await window.ghostmind.listModels();
-    if (!models || !models.length) return; // keep the built-in fallback list
-    const current = (state.settings && state.settings.model) || sel.value;
+    let models = await window.ghostmind.listModels();
+    if (!models || !models.length) {
+      // No live list (no key yet / offline): fall back to the active
+      // provider's built-in defaults so the picker is never stale.
+      const meta = GM_PROVIDERS[gmProvider()] || GM_PROVIDERS.anthropic;
+      const fb = [];
+      if (meta.def) fb.push({ id: meta.def, name: meta.def });
+      if (meta.small && meta.small !== meta.def) fb.push({ id: meta.small, name: meta.small });
+      if (!fb.length) return;
+      models = fb;
+    }
+    const current = gmModelFor(gmProvider()) || sel.value;
     sel.innerHTML = '';
     for (const m of models.slice(0, 12)) {
       const o = document.createElement('option');
@@ -591,7 +600,7 @@ document.getElementById('ask-calls-btn')?.addEventListener('click', async () => 
     const ctx = state.sessions.map(s => `- ${s.date}: ${s.summary}`).join('\n');
     const data = await window.ghostmind.sendAIRequest({
       messages: [{ role: 'user', content: `Here are summaries of my past GhostMind sessions:\n\n${ctx}\n\nQuestion: ${q}\n\nAnswer using only these summaries. If they don't cover the question, say so plainly.` }],
-      model: 'claude-haiku-5-5',
+      model: gmSmallModel(),
       maxTokens: 600,
     });
     out.innerHTML = renderMarkdown(data.content?.[0]?.text || 'No answer.');
@@ -719,11 +728,66 @@ function applyTheme(name) {
   document.documentElement.setAttribute('data-theme', name || 'obsidian');
 }
 
+// ─── v3.12 PROVIDERS + NEW SESSION ────────────────────────────────────────────
+const GM_PROVIDERS = {
+  anthropic: { small: 'claude-haiku-5-5', def: 'claude-sonnet-5-5', keyLabel: 'Anthropic API Key', ph: 'sk-ant-api03-...' },
+  openai:    { small: 'gpt-5-mini',       def: 'gpt-5.1',          keyLabel: 'OpenAI API Key',    ph: 'sk-...' },
+  gemini:    { small: 'gemini-2.5-flash', def: 'gemini-2.5-pro',   keyLabel: 'Google AI API Key', ph: 'AIza...' },
+  custom:    { small: '',                 def: '',                 keyLabel: 'API Key (optional for local servers)', ph: 'sk-... (blank for Ollama)' },
+};
+function gmProvider() { return (state.settings && state.settings.provider) || 'anthropic'; }
+function gmSmallModel() {
+  const meta = GM_PROVIDERS[gmProvider()];
+  return (meta && meta.small) || gmModelFor(gmProvider()) || 'claude-haiku-5-5';
+}
+function gmKeyFor(p) {
+  const s = state.settings || {};
+  if (s.keys && s.keys[p]) return s.keys[p];
+  return p === 'anthropic' ? (s.apiKey || '') : '';
+}
+function gmModelFor(p) {
+  const s = state.settings || {};
+  if (p === 'anthropic') return s.model || GM_PROVIDERS.anthropic.def;
+  return (s.models && s.models[p]) || (GM_PROVIDERS[p] && GM_PROVIDERS[p].def) || '';
+}
+function gmSyncProviderUI(s) {
+  s = s || state.settings || {};
+  const sel = document.getElementById('s-provider');
+  const p = (sel && sel.value) || s.provider || 'anthropic';
+  const meta = GM_PROVIDERS[p] || GM_PROVIDERS.anthropic;
+  const lbl = document.getElementById('s-apikey-label');
+  if (lbl) lbl.textContent = meta.keyLabel;
+  const key = document.getElementById('s-apikey');
+  if (key) { key.value = gmKeyFor(p); key.placeholder = meta.ph; }
+  const row = document.getElementById('s-baseurl-row');
+  if (row) row.style.display = p === 'custom' ? '' : 'none';
+  const bu = document.getElementById('s-baseurl');
+  if (bu && document.activeElement !== bu) bu.value = s.baseUrl || '';
+  const m = document.getElementById('s-model');
+  if (m) { const mv = gmModelFor(p); if (mv) m.value = mv; }
+}
+// New session: wipe the context the AI actually sees. state.messages is
+// the history sent with every request — including the model's own earlier
+// refusals, which is exactly what makes a stuck conversation keep
+// refusing. An auto-draft of the old conversation is saved first
+// (v3.5.3), so nothing is lost. The live call transcript stays: it is
+// the current call, not chat history.
+function startNewSession() {
+  try { pushAutoDraft(); } catch (_) {}
+  state.messages = [];
+  const box = document.getElementById('messages');
+  if (box) box.innerHTML = '';
+  const ls = document.getElementById('live-summary');
+  if (ls) ls.textContent = '';
+  addMsg('system', 'New session — the previous conversation has been cleared, so the AI starts fresh from your next message.');
+}
+
 function applySettings(s) {
   const sid = v => document.getElementById(v);
-  sid('s-apikey').value    = s.apiKey    || '';
+  const provSel0 = sid('s-provider'); if (provSel0) provSel0.value = s.provider || 'anthropic';
+  gmSyncProviderUI(s);
   sid('s-localmodel').value = s.localModel || 'base.en';
-  sid('s-model').value     = s.model     || 'claude-sonnet-5-5';
+  sid('s-model').value     = gmModelFor(s.provider || 'anthropic') || 'claude-sonnet-5-5';
   sid('s-system').value    = s.systemPrompt || '';
   sid('s-hotkey').value    = s.hotkey    || 'CommandOrControl+Shift+G';
   sid('s-snipe-hotkey').value = s.snipeHotkey || 'CommandOrControl+Shift+S';
@@ -756,13 +820,24 @@ function applySettings(s) {
 }
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
+  const prov = document.getElementById('s-provider').value;
+  const keyVal = document.getElementById('s-apikey').value.trim();
+  const modelVal = document.getElementById('s-model').value;
+  const keys = { ...((state.settings && state.settings.keys) || {}) };
+  keys[prov] = keyVal;
+  const models = { ...((state.settings && state.settings.models) || {}) };
+  if (prov !== 'anthropic') models[prov] = modelVal;
   const s = {
     ...state.settings,
-    apiKey:        document.getElementById('s-apikey').value.trim(),
+    provider:      prov,
+    keys,
+    models,
+    baseUrl:       ((document.getElementById('s-baseurl') || {}).value || '').trim(),
+    apiKey:        keys.anthropic || '',
     transcriptionMethod: 'local',
     localModel:    document.getElementById('s-localmodel').value,
     youDeviceId:   document.getElementById('s-you-device').value,
-    model:         document.getElementById('s-model').value,
+    model:         prov === 'anthropic' ? modelVal : ((state.settings && state.settings.model) || 'claude-sonnet-5-5'),
     systemPrompt:  document.getElementById('s-system').value.trim(),
     hotkey:        document.getElementById('s-hotkey').value.trim(),
     snipeHotkey:   document.getElementById('s-snipe-hotkey').value.trim(),
@@ -783,7 +858,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   state.settings = s;
   checkAIConnection(true);
   populateModels();
-  setStatus(s.apiKey ? 'ready' : 'offline');
+  setStatus((prov === 'custom' ? !!s.baseUrl : !!keyVal) ? 'ready' : 'offline');
   addMsg('system', '✓ Settings saved');
   switchTab('chat');
 });
@@ -988,7 +1063,7 @@ async function askAI(userText, imgB64, apiTextOverride) {
     // Streamed (v3.3): the answer types itself into the typing bubble.
     const text = await streamAIRequest({
       messages: apiMessages,
-      model: state.settings.model || 'claude-sonnet-5-5',
+      model: gmModelFor(gmProvider()),
       systemPrompt: (state.settings.systemPrompt || 'You are GhostMind, an invisible AI copilot. Lead with the answer, keep it tight and scannable, no preamble.') + (state.settings.codeOnlyMode ? CODE_ONLY_SUFFIX : ''),
       maxTokens: 2048
     }, typingEl);
@@ -1073,7 +1148,7 @@ async function askCopilotAI(question) {
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: apiMessages,
-      model: state.settings.model || 'claude-sonnet-5-5',
+      model: gmModelFor(gmProvider()),
       systemPrompt: copilotSystemPrompt,
       maxTokens: 2048
     });
@@ -1662,7 +1737,7 @@ async function triggerProactiveInsight() {
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: [{ role: 'user', content: `Conversation context: "${recent}"\n\nOne insight:` }],
-      model: 'claude-haiku-5-5',
+      model: gmSmallModel(),
       systemPrompt: 'You are a silent assistant. Based on conversation context, give ONE ultra-short insight, warning, or suggestion (max 15 words). No preamble.',
       maxTokens: 80
     });
@@ -1687,7 +1762,7 @@ window.ghostmind.on('screen-snapshot', async ({ b64, mediaType = 'image/png' }) 
           { type: 'text', text: 'What do you notice?' }
         ]
       }],
-      model: 'claude-haiku-5-5',
+      model: gmSmallModel(),
       systemPrompt: 'You are a silent AI assistant watching someone\'s screen. If you see something interesting, a problem, or something you can help with — give ONE short proactive suggestion (max 15 words). If nothing interesting, respond with just: "ok".',
       maxTokens: 80
     });
@@ -1770,7 +1845,7 @@ document.getElementById('save-session-btn').addEventListener('click', async () =
   try {
     const data = await window.ghostmind.sendAIRequest({
       messages: state.messages.slice(-10),
-      model: 'claude-haiku-5-5',
+      model: gmSmallModel(),
       systemPrompt: 'Summarize this conversation in 2-3 sentences. Focus on what was discussed and any conclusions. Be concise.',
       maxTokens: 150
     });
@@ -1924,9 +1999,14 @@ initStealthCursor();
     mp.addEventListener('change', async () => {
       try {
         sm.value = mp.value;
-        if (state.settings) state.settings.model = mp.value;
+        const p = gmProvider();
+        if (state.settings) {
+          if (p === 'anthropic') state.settings.model = mp.value;
+          else state.settings.models = { ...(state.settings.models || {}), [p]: mp.value };
+        }
         const cur = await window.ghostmind.getSettings();
-        await window.ghostmind.saveSettings({ ...cur, model: mp.value });
+        const patch = p === 'anthropic' ? { model: mp.value } : { models: { ...(cur.models || {}), [p]: mp.value } };
+        await window.ghostmind.saveSettings({ ...cur, ...patch });
       } catch (_) {}
     });
   }
@@ -1941,6 +2021,17 @@ initStealthCursor();
     const tag = (document.activeElement && document.activeElement.tagName) || '';
     if (e.key === '?' && !/INPUT|TEXTAREA|SELECT/.test(tag)) toggleSheet();
     if (e.key === 'Escape') toggleSheet(false);
+  });
+  // v3.12: switching provider re-labels the key field + refreshes models
+  document.getElementById('s-provider')?.addEventListener('change', (e) => {
+    if (state.settings) state.settings.provider = e.target.value;
+    gmSyncProviderUI(state.settings);
+    populateModels();
+  });
+  // v3.12: New session button + Cmd/Ctrl+Shift+N
+  document.getElementById('new-session-btn')?.addEventListener('click', () => startNewSession());
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'N' || e.key === 'n')) { e.preventDefault(); startNewSession(); }
   });
   // Auto-collapse: idle on the Chat tab for 90s -> bar + Ask only.
   let collapsed = false;
