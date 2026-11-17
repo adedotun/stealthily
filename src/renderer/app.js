@@ -1984,6 +1984,40 @@ initStealthCursor();
     switchTab('settings');
     document.getElementById('run-checks-btn')?.click();
   });
+  // ── Updater button (v3.13) ─────────────────────────────────────────────
+  const updBtn = document.getElementById('update-btn');
+  const updNote = document.getElementById('update-note');
+  const updDot = document.getElementById('update-dot');
+  let updState = { status: 'idle' };
+  let updIdleTimer = null;
+  function renderUpdate(s) {
+    if (!updBtn) return;
+    updState = s || updState;
+    const st = updState.status;
+    updBtn.classList.toggle('upd-ready', st === 'available' || st === 'downloaded');
+    if (updDot) updDot.style.display = (st === 'available' || st === 'downloaded') ? '' : 'none';
+    let note = '';
+    updBtn.disabled = false;
+    if (st === 'checking') { updBtn.textContent = '⏳ Checking for updates…'; updBtn.disabled = true; }
+    else if (st === 'available') { updBtn.textContent = `⬆ Download update v${updState.version || ''}`; note = `GhostMind v${updState.version || ''} is available.`; }
+    else if (st === 'downloading') { updBtn.textContent = `⬇ Downloading… ${updState.percent || 0}%`; updBtn.disabled = true; }
+    else if (st === 'downloaded') { updBtn.textContent = '🔁 Restart to update'; note = `v${updState.version || ''} is downloaded and ready — restarting applies it.`; }
+    else if (st === 'uptodate') { updBtn.textContent = '✓ Up to date'; note = 'You are on the latest version.'; clearTimeout(updIdleTimer); updIdleTimer = setTimeout(() => renderUpdate({ status: 'idle' }), 5000); }
+    else if (st === 'error') { updBtn.textContent = '⚠ Update failed — get it manually'; note = (updState.message || 'Something went wrong.') + ' Click the button to open the download page.'; }
+    else { updBtn.textContent = '🔄 Check for updates'; }
+    if (updNote) { updNote.textContent = note; updNote.style.display = note ? '' : 'none'; }
+  }
+  updBtn?.addEventListener('click', async () => {
+    const st = updState.status;
+    try {
+      if (st === 'available') { renderUpdate({ status: 'downloading', percent: 0, version: updState.version }); await window.ghostmind.downloadUpdate(); }
+      else if (st === 'downloaded') { await window.ghostmind.installUpdate(); }
+      else if (st === 'error') { await window.ghostmind.openExternal('https://github.com/adedotun/stealthily/releases/latest'); }
+      else { renderUpdate({ status: 'checking' }); await window.ghostmind.checkForUpdates(); }
+    } catch (e) { renderUpdate({ status: 'error', message: String(e?.message || e) }); }
+  });
+  window.ghostmind.on('update-status', renderUpdate);
+  window.ghostmind.getUpdateState?.().then(renderUpdate).catch(() => {});
   // Contextual action row: quick actions only during/after a call
   const refreshCallActive = () => document.body.classList.toggle('call-active', !!(state.isCapturing || (state.transcript && state.transcript.length)));
   setInterval(refreshCallActive, 2000);

@@ -716,17 +716,53 @@ async function captureFullScreen() {
 // launch and offers the update through the OS dialog electron-updater
 // provides. Packaged builds only; completely silent in dev/test and if
 // the dependency is absent.
+// ─── AUTO-UPDATE (v3.13) ──────────────────────────────────────────────────
+// A small state machine the renderer draws as a button in the status
+// popover: idle -> checking -> available -> downloading -> downloaded
+// -> (restart to install). Any failure lands in 'error', where the
+// button offers the manual download page instead. autoDownload stays
+// OFF so the button — not the background — decides when a ~180 MB
+// download starts. Checks run at launch and every 4 hours.
+let updateState = { status: 'idle', version: null, percent: 0, message: '' };
+function setUpdateState(patch) {
+  updateState = { ...updateState, ...patch };
+  safeLog(`update: ${updateState.status}${updateState.version ? ' v' + updateState.version : ''}`);
+  sendToRenderer('update-status', updateState);
+}
 function setupAutoUpdates() {
   try {
     if (!app.isPackaged || isTest) return;
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.autoDownload = true;
-    autoUpdater.on('error', (e) => safeLog('Auto-update check failed:', e?.message || e));
-    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.on('checking-for-update', () => setUpdateState({ status: 'checking', message: '' }));
+    autoUpdater.on('update-available', (info) => setUpdateState({ status: 'available', version: info?.version || null }));
+    autoUpdater.on('update-not-available', () => setUpdateState({ status: 'uptodate', version: null }));
+    autoUpdater.on('download-progress', (p) => setUpdateState({ status: 'downloading', percent: Math.round(p?.percent || 0) }));
+    autoUpdater.on('update-downloaded', (info) => setUpdateState({ status: 'downloaded', version: info?.version || updateState.version, percent: 100 }));
+    autoUpdater.on('error', (e) => setUpdateState({ status: 'error', message: String(e?.message || e || 'Update failed') }));
+    autoUpdater.checkForUpdates().catch(() => {});
+    setInterval(() => { autoUpdater.checkForUpdates().catch(() => {}); }, 4 * 60 * 60 * 1000);
   } catch (e) {
     safeLog('Auto-update unavailable:', e?.message || e);
   }
 }
+
+ipcMain.handle('get-update-state', () => updateState);
+ipcMain.handle('check-for-updates', async () => {
+  try { const { autoUpdater } = require('electron-updater'); await autoUpdater.checkForUpdates(); }
+  catch (e) { setUpdateState({ status: 'error', message: String(e?.message || e) }); }
+  return updateState;
+});
+ipcMain.handle('download-update', async () => {
+  try { const { autoUpdater } = require('electron-updater'); await autoUpdater.downloadUpdate(); }
+  catch (e) { setUpdateState({ status: 'error', message: String(e?.message || e) }); }
+  return updateState;
+});
+ipcMain.handle('install-update', () => {
+  try { const { autoUpdater } = require('electron-updater'); autoUpdater.quitAndInstall(); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e?.message || e) }; }
+});
 
 // ─── CLIPBOARD WATCHER ────────────────────────────────────────────────────────
 let clipboardTimer = null;

@@ -16,6 +16,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.11:** Windows gets real acrylic glass, and transcription is redesigned — merged speaker turns, an in-place live tail, a listening strip with live level meters, and auto-scroll that respects reading — see [What changed in v3.11](#what-changed-in-v311).
 **v3.11.1:** full-screen overlay fix — GhostMind now runs as an accessory (agent) app so its window joins other apps’ full-screen Spaces instead of vanishing — see [What changed in v3.11.1](#what-changed-in-v3111).
 **v3.12.3:** the hide/show toggle is truly fixed — the show path was calling a helper that had been accidentally defined inside another function, so every show threw and aborted before the window could appear — see [What changed in v3.12.3](#what-changed-in-v3123).
+**v3.13:** the updater gets a face — a button in the status popover that checks, downloads, and restarts to install, with a dot on the status pill when an update is waiting — see [What changed in v3.13](#what-changed-in-v313).
 
 ---
 
@@ -253,6 +254,13 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 - **Fixed: GhostMind now overlays other apps in full screen.** The window had every standard setting (all-Spaces visibility, full-screen auxiliary, screen-saver z-order) — but it also passed `skipTransformProcessType: true`, which kept the app a regular process, and a regular app's windows cannot join another app's full-screen Space on modern macOS. GhostMind now runs with the **accessory (agent) activation policy**, matching its dockless design, and re-asserts its all-Spaces/full-screen presence on every show, since macOS can drop a window from a full-screen Space across hide/show cycles. This covers ordinary full-screen apps — browsers, Zoom/Teams, documents, video. (A few modes still sit above everything by design: Keynote/PowerPoint slideshow and proctoring software.)
 - Windows is unchanged in this release — the v3.11.0 `GhostMind.exe` is attached here as-is so the download links keep working.
+
+## What changed in v3.13
+
+- **An update button that knows the state of things.** Until now the auto-updater ran silently in the background. It is now a visible button in the status popover (click the status pill) with a full life cycle: *Check for updates* → *Downloading… NN%* → *Restart to update*. A small blue dot appears on the status pill itself whenever an update is available or downloaded, so you notice without opening anything.
+- **You decide when the download starts.** Automatic downloading is off; the background only *checks* (at launch, and every 4 hours while the app runs). The ~180 MB download begins when you click — and if anything fails along the way, the button turns into a one-click route to the manual download page instead of leaving you guessing.
+- **Update events are logged.** Every state change lands in the app's debug log, so an update problem is diagnosable after the fact — the same lesson the v3.12.3 hide/show fix taught.
+
 
 ## What changed in v3.12.3
 

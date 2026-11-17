@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('ghostmind', {
   checkAI:        ()       => ipcRenderer.invoke('check-ai'),
   listModels:     ()       => ipcRenderer.invoke('list-models'),
   getDiagnostics: ()       => ipcRenderer.invoke('get-diagnostics'),
+  // ── Updates (v3.13) ────────────────────────────────────────────────────
+  getUpdateState: ()       => ipcRenderer.invoke('get-update-state'),
+  checkForUpdates: ()      => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: ()       => ipcRenderer.invoke('download-update'),
+  installUpdate:  ()       => ipcRenderer.invoke('install-update'),
   exportSession:  (md)     => ipcRenderer.invoke('export-session', { markdown: md }),
 
   // ── Sessions / Memory ─────────────────────────────────────────────────────
@@ -66,7 +71,7 @@ contextBridge.exposeInMainWorld('ghostmind', {
       'transcription-error', 'transcription-notice',
       'sysaudio-pcm', 'sysaudio-status',
       'external-transcript', 'external-state',
-      'ai-stream-chunk', 'ai-stream-done', 'ai-stream-error',
+      'ai-stream-chunk', 'ai-stream-done', 'ai-stream-error', 'update-status',
     ];
     if (allowed.includes(channel)) {
       ipcRenderer.on(channel, (_, data) => fn(data));

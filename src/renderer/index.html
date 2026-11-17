@@ -1147,6 +1147,10 @@ body { --cb: #2f6bff; background: transparent; }
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
 }
 #status-popover.open { display: block; }
+#update-dot { width: 7px; height: 7px; border-radius: 50%; background: #2f6bff; box-shadow: 0 0 6px #2f6bff; margin-left: 2px; flex: none; }
+#update-btn { margin-top: 6px; }
+#update-btn.upd-ready { background: #2f6bff; color: #fff; border-color: #2f6bff; }
+#update-note { font-size: 11px; opacity: 0.75; margin-top: 6px; line-height: 1.45; }
 #status-popover #pills-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 8px; }
 #collapse-caret {
   display: block; width: 8px; height: 8px; margin: auto;
@@ -1247,6 +1251,7 @@ body:not(.call-active) #quick-bar { display: none; }
       <div id="status-pill">
         <div id="status-dot"></div>
         <span id="status-text">OFFLINE</span>
+        <span id="update-dot" title="Update available" style="display:none"></span>
       </div>
       <button id="home-listen-btn">🎧 Start Listening</button>
       <span id="session-timer" style="display:none">00:00</span>
@@ -1271,6 +1276,8 @@ body:not(.call-active) #quick-bar { display: none; }
       <button id="home-compact-btn" title="Shrink to just the Listen button and transcript">🗗 Compact</button>
     </div>
     <button class="snipe-btn" id="popover-checks-btn">🩺 Run checks</button>
+    <button class="snipe-btn" id="update-btn">🔄 Check for updates</button>
+    <div id="update-note" style="display:none"></div>
   </div>
 
   <!-- TABBAR -->
