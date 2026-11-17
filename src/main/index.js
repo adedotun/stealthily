@@ -28,8 +28,22 @@ app.commandLine.appendSwitch('disable-http-cache');
 if (process.stdout) process.stdout.on('error', () => {});
 if (process.stderr) process.stderr.on('error', () => {});
 
+let _gmLogPath = null;
 function safeLog(...args) {
   try { console.error(...args); } catch (_) {}
+  // v3.12.3: main-process diagnostics must also land in the debug log
+  // file. Until now safeLog wrote only to stderr, which a packaged GUI
+  // app discards — main-process errors (including the ReferenceError
+  // that silently broke hide->show) were invisible.
+  try {
+    if (!_gmLogPath) {
+      const { app } = require('electron');
+      _gmLogPath = require('path').join(app.getPath('userData'), 'audio-debug.log');
+    }
+    const msg = args.map((a) => (a && a.stack) ? a.stack : (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    require('fs').appendFileSync(_gmLogPath, `[${new Date().toISOString()}] ${msg}
+`);
+  } catch (_) {}
 }
 
 function sendToRenderer(channel, data) {
@@ -454,15 +468,6 @@ function createWindow() {
   // alwaysOnTop with 'screen-saver' level gets the highest z-order
   mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
 
-// v3.11.1: re-asserted on every show — macOS can drop a window from a
-// full-screen Space across hide/show cycles, so showing re-joins it.
-function assertOverlayPresence() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (process.platform === 'darwin') {
-    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  }
-  mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-}
 
   // Clear cache to bypass any persistent Chromium caches
   if (mainWindow.webContents && mainWindow.webContents.session) {
@@ -519,35 +524,61 @@ function registerHotkeys() {
   ];
 
   for (const [accel, handler] of bindings) {
-    if (!globalShortcut.register(accel, handler)) {
-      safeLog(`Hotkey registration failed (may be in use): ${accel}`);
-    }
+    const okReg = globalShortcut.register(accel, handler);
+    safeLog(`hotkey: register ${accel} -> ${okReg}`);
+    if (!okReg) safeLog(`Hotkey registration failed (may be in use): ${accel}`);
   }
 }
 
 function toggleVisibility() {
   const vis = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow.isVisible() : isVisible;
+  safeLog(`hotkey: toggle fired, judged visible=${vis}, flag=${isVisible}`);
   if (vis) hideWindow();
   else showWindow();
 }
 
-function hideWindow() {
+// v3.11.1: re-asserted on every show — macOS can drop a window from a
+// full-screen Space across hide/show cycles, so showing re-joins it.
+function assertOverlayPresence() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (process.platform === 'darwin') {
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+  mainWindow.setAlwaysOnTop(true, 'screen-saver', 1);
+}
+
+function hideWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) { safeLog('window: hide requested but no live window'); return; }
   mainWindow.hide();
   isVisible = false;
+  safeLog(`window: hide() done, isVisible()=${mainWindow.isVisible()}`);
 }
 
 function showWindow() {
+  safeLog('window: show requested');
   if (!mainWindow || mainWindow.isDestroyed()) {
     safeLog('window: recreating for show');
     createWindow();
   }
   assertOverlayPresence();
   if (mainWindow.isMinimized()) mainWindow.restore();
+  try { app.focus(); } catch (_) {}
   mainWindow.show();
   mainWindow.focus();
   try { mainWindow.moveTop(); } catch (_) {}
   isVisible = true;
+  safeLog(`window: show() done, isVisible()=${mainWindow.isVisible()}`);
+  const w = mainWindow;
+  setTimeout(() => {
+    try {
+      if (w && !w.isDestroyed() && !w.isVisible()) {
+        safeLog('window: show() did not take effect — recreating window');
+        try { w.destroy(); } catch (_) {}
+        if (mainWindow === w) mainWindow = null;
+        createWindow();
+      }
+    } catch (_) {}
+  }, 350);
 }
 
 // ─── STEALTH SCREEN CAPTURE ───────────────────────────────────────────────────

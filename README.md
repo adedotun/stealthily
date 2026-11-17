@@ -15,7 +15,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.10.1:** macOS floor fix — the call-audio helper was accidentally built requiring macOS 27; it now targets macOS 13 (Ventura), so the full app runs on macOS 13 and later — see [What changed in v3.10.1](#what-changed-in-v3101).
 **v3.11:** Windows gets real acrylic glass, and transcription is redesigned — merged speaker turns, an in-place live tail, a listening strip with live level meters, and auto-scroll that respects reading — see [What changed in v3.11](#what-changed-in-v311).
 **v3.11.1:** full-screen overlay fix — GhostMind now runs as an accessory (agent) app so its window joins other apps’ full-screen Spaces instead of vanishing — see [What changed in v3.11.1](#what-changed-in-v3111).
-**v3.12.1:** the hide/show toggle can no longer get stuck — window visibility follows the window's real state — on top of v3.12's any-provider AI (Claude, OpenAI, Gemini, or any OpenAI-compatible endpoint) — see [What changed in v3.12.1](#what-changed-in-v3121).
+**v3.12.3:** the hide/show toggle is truly fixed — the show path was calling a helper that had been accidentally defined inside another function, so every show threw and aborted before the window could appear — see [What changed in v3.12.3](#what-changed-in-v3123).
 
 ---
 
@@ -253,6 +253,11 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 - **Fixed: GhostMind now overlays other apps in full screen.** The window had every standard setting (all-Spaces visibility, full-screen auxiliary, screen-saver z-order) — but it also passed `skipTransformProcessType: true`, which kept the app a regular process, and a regular app's windows cannot join another app's full-screen Space on modern macOS. GhostMind now runs with the **accessory (agent) activation policy**, matching its dockless design, and re-asserts its all-Spaces/full-screen presence on every show, since macOS can drop a window from a full-screen Space across hide/show cycles. This covers ordinary full-screen apps — browsers, Zoom/Teams, documents, video. (A few modes still sit above everything by design: Keynote/PowerPoint slideshow and proctoring software.)
 - Windows is unchanged in this release — the v3.11.0 `GhostMind.exe` is attached here as-is so the download links keep working.
+
+## What changed in v3.12.3
+
+- **Root cause of "hidden and won't come back" found and fixed.** The show path calls `assertOverlayPresence()` — but since v3.11.1 that helper was defined *inside* `createWindow()`, so it didn't exist in the scope where the show path runs. Every show threw a `ReferenceError` and aborted before the window call; hide never used the helper, which is why hiding always worked and showing never did. The helper now lives at module level. (v3.12.1/v3.12.2 hardened the surrounding paths — real-state toggle judgment, window recreation fallback, activation — but the exception fired before any of them could run.)
+- **Main-process errors are no longer invisible.** The main process's logger wrote only to stderr, which a packaged app discards — that's why this failure left no trace in the debug log for weeks. It now also appends to the debug log file, and hotkey registration, toggle decisions and show/hide outcomes are recorded there.
 
 ## What changed in v3.12.1
 
