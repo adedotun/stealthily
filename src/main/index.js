@@ -487,6 +487,16 @@ function assertOverlayPresence() {
 
   // Prevent navigation away
   mainWindow.webContents.on('will-navigate', (e) => e.preventDefault());
+
+  // v3.12.1: keep the visibility flag honest. macOS can hide a window
+  // without going through hideWindow() (Space changes, OS-level hide),
+  // which left the hand-maintained flag stale — the toggle hotkey then
+  // "hid" an already-hidden window and GhostMind seemed impossible to
+  // bring back. Sync the flag from the window's real events, and log
+  // transitions so a stuck window is diagnosable in the debug log.
+  mainWindow.on('show', () => { isVisible = true; safeLog('window: shown'); });
+  mainWindow.on('hide', () => { isVisible = false; safeLog('window: hidden'); });
+  mainWindow.on('closed', () => { mainWindow = null; isVisible = false; safeLog('window: closed'); });
 }
 
 // ─── GLOBAL HOTKEYS ───────────────────────────────────────────────────────────
@@ -516,7 +526,8 @@ function registerHotkeys() {
 }
 
 function toggleVisibility() {
-  if (isVisible) hideWindow();
+  const vis = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow.isVisible() : isVisible;
+  if (vis) hideWindow();
   else showWindow();
 }
 
@@ -527,10 +538,15 @@ function hideWindow() {
 }
 
 function showWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    safeLog('window: recreating for show');
+    createWindow();
+  }
   assertOverlayPresence();
+  if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
+  try { mainWindow.moveTop(); } catch (_) {}
   isVisible = true;
 }
 
@@ -1172,7 +1188,7 @@ app.whenReady().then(() => {
     const gotLock = app.requestSingleInstanceLock();
     if (!gotLock) { app.quit(); return; }
     app.on('second-instance', () => {
-      if (mainWindow) { assertOverlayPresence(); mainWindow.show(); mainWindow.focus(); }
+      showWindow();
     });
   }
 

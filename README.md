@@ -15,7 +15,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.10.1:** macOS floor fix — the call-audio helper was accidentally built requiring macOS 27; it now targets macOS 13 (Ventura), so the full app runs on macOS 13 and later — see [What changed in v3.10.1](#what-changed-in-v3101).
 **v3.11:** Windows gets real acrylic glass, and transcription is redesigned — merged speaker turns, an in-place live tail, a listening strip with live level meters, and auto-scroll that respects reading — see [What changed in v3.11](#what-changed-in-v311).
 **v3.11.1:** full-screen overlay fix — GhostMind now runs as an accessory (agent) app so its window joins other apps’ full-screen Spaces instead of vanishing — see [What changed in v3.11.1](#what-changed-in-v3111).
-**v3.12:** use any AI — Claude, OpenAI, Gemini, or any OpenAI-compatible endpoint (OpenRouter, Groq, Ollama...) — plus a New Session button that clears the conversation so the AI starts fresh — see [What changed in v3.12](#what-changed-in-v312).
+**v3.12.1:** the hide/show toggle can no longer get stuck — window visibility follows the window's real state — on top of v3.12's any-provider AI (Claude, OpenAI, Gemini, or any OpenAI-compatible endpoint) — see [What changed in v3.12.1](#what-changed-in-v3121).
 
 ---
 
@@ -253,6 +253,10 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 - **Fixed: GhostMind now overlays other apps in full screen.** The window had every standard setting (all-Spaces visibility, full-screen auxiliary, screen-saver z-order) — but it also passed `skipTransformProcessType: true`, which kept the app a regular process, and a regular app's windows cannot join another app's full-screen Space on modern macOS. GhostMind now runs with the **accessory (agent) activation policy**, matching its dockless design, and re-asserts its all-Spaces/full-screen presence on every show, since macOS can drop a window from a full-screen Space across hide/show cycles. This covers ordinary full-screen apps — browsers, Zoom/Teams, documents, video. (A few modes still sit above everything by design: Keynote/PowerPoint slideshow and proctoring software.)
 - Windows is unchanged in this release — the v3.11.0 `GhostMind.exe` is attached here as-is so the download links keep working.
+
+## What changed in v3.12.1
+
+- **"Hidden and won't come back" fixed.** GhostMind tracked window visibility with a hand-maintained flag that could go stale when macOS hid the window outside the app's own hide path — the toggle hotkey then "hid" an already-hidden window and the app seemed impossible to summon. Visibility is now synced from the window's real show/hide events, the toggle judges the window itself, showing recreates a missing window and un-minimizes a minimized one, and relaunching the app while it runs uses the same hardened path. Hide/show transitions are logged, so any recurrence is diagnosable.
 
 ## What changed in v3.12
 
