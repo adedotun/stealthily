@@ -739,7 +739,7 @@ function setupAutoUpdates() {
     autoUpdater.on('update-available', (info) => setUpdateState({ status: 'available', version: info?.version || null }));
     autoUpdater.on('update-not-available', () => setUpdateState({ status: 'uptodate', version: null }));
     autoUpdater.on('download-progress', (p) => setUpdateState({ status: 'downloading', percent: Math.round(p?.percent || 0) }));
-    autoUpdater.on('update-downloaded', (info) => setUpdateState({ status: 'downloaded', version: info?.version || updateState.version, percent: 100 }));
+    autoUpdater.on('update-downloaded', (info) => setUpdateState({ status: 'downloaded', version: info?.version || updateState.version, percent: 100, file: info?.downloadedFile || null }));
     autoUpdater.on('error', (e) => setUpdateState({ status: 'error', message: String(e?.message || e || 'Update failed') }));
     autoUpdater.checkForUpdates().catch(() => {});
     setInterval(() => { autoUpdater.checkForUpdates().catch(() => {}); }, 4 * 60 * 60 * 1000);
@@ -760,8 +760,43 @@ ipcMain.handle('download-update', async () => {
   return updateState;
 });
 ipcMain.handle('install-update', () => {
-  try { const { autoUpdater } = require('electron-updater'); autoUpdater.quitAndInstall(); return { ok: true }; }
-  catch (e) { return { ok: false, error: String(e?.message || e) }; }
+  try {
+    if (process.platform === 'darwin' && updateState.file) {
+      // Squirrel's quitAndInstall silently no-ops for this app (proven
+      // live on v3.13.0 -> v3.13.1: downloaded fine, restart did
+      // nothing). So on macOS we apply the downloaded zip ourselves:
+      // a detached helper waits for the app to quit, swaps the bundle
+      // in /Applications, and relaunches it. Same bundle ID and
+      // signing identity, so permissions and settings carry over.
+      const fs = require('fs');
+      const { spawn } = require('child_process');
+      const scriptPath = path.join(app.getPath('userData'), 'apply-update.sh');
+      const script = [
+        '#!/bin/sh',
+        'ZIP="$1"',
+        'for i in $(seq 1 60); do pgrep -f "GhostMind.app/Contents/MacOS/GhostMind" >/dev/null 2>&1 || break; sleep 1; done',
+        'pgrep -f "GhostMind.app/Contents/MacOS/GhostMind" >/dev/null 2>&1 && exit 1',
+        'sleep 1',
+        'STAGE="/tmp/gm-update-stage"',
+        'rm -rf "$STAGE"; mkdir -p "$STAGE"',
+        'ditto -x -k "$ZIP" "$STAGE" || exit 1',
+        '[ -d "$STAGE/GhostMind.app" ] || exit 1',
+        'rm -rf /Applications/GhostMind.app',
+        'mv "$STAGE/GhostMind.app" /Applications/GhostMind.app || exit 1',
+        'open -a GhostMind',
+        '',
+      ].join('\n');
+      fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+      safeLog('update: applying via helper script, zip:', updateState.file);
+      const child = spawn('/bin/sh', [scriptPath, updateState.file], { detached: true, stdio: 'ignore' });
+      child.unref();
+      setTimeout(() => app.quit(), 600);
+      return { ok: true, method: 'script' };
+    }
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.quitAndInstall();
+    return { ok: true, method: 'native' };
+  } catch (e) { return { ok: false, error: String(e?.message || e) }; }
 });
 
 // ─── CLIPBOARD WATCHER ────────────────────────────────────────────────────────
