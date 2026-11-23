@@ -92,11 +92,14 @@ jobs:
         shell: pwsh
         run: |
           Start-Process dist/Hush.exe -ArgumentList '/S' -Wait
-          $appDir = "$env:LocalAppData\Programs\Hush!"
-          if (-not (Test-Path "$appDir\Hush!.exe")) { throw 'app did not install where expected' }
+          Start-Sleep -Seconds 5
+          $exe = Get-ChildItem "$env:LocalAppData\Programs" -Recurse -Filter 'Hush!.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw 'app did not install under Programs' }
+          $appDir = $exe.DirectoryName
+          Write-Host "Installed at: $appDir"
           if (-not (Test-Path "$appDir\resources\sysaudio-win\sysaudio-win.exe")) { throw 'system-audio helper missing from install' }
           if (-not (Test-Path "$appDir\resources\app.asar.unpacked\sidecar\bin\ghostmind-whisper.exe")) { throw 'whisper sidecar missing from install' }
-          $p = Start-Process "$appDir\Hush!.exe" -PassThru
+          $p = Start-Process $exe.FullName -PassThru
           Start-Sleep -Seconds 12
           if ($p.HasExited) { throw "app exited during first launch (code $($p.ExitCode))" }
           Stop-Process -Id $p.Id -Force
