@@ -91,12 +91,12 @@ jobs:
       - name: Smoke-test install + first launch
         shell: pwsh
         run: |
-          Start-Process dist/GhostMind.exe -ArgumentList '/S' -Wait
-          $appDir = "$env:LocalAppData\Programs\GhostMind"
-          if (-not (Test-Path "$appDir\GhostMind.exe")) { throw 'app did not install where expected' }
+          Start-Process dist/Hush.exe -ArgumentList '/S' -Wait
+          $appDir = "$env:LocalAppData\Programs\Hush!"
+          if (-not (Test-Path "$appDir\Hush!.exe")) { throw 'app did not install where expected' }
           if (-not (Test-Path "$appDir\resources\sysaudio-win\sysaudio-win.exe")) { throw 'system-audio helper missing from install' }
           if (-not (Test-Path "$appDir\resources\app.asar.unpacked\sidecar\bin\ghostmind-whisper.exe")) { throw 'whisper sidecar missing from install' }
-          $p = Start-Process "$appDir\GhostMind.exe" -PassThru
+          $p = Start-Process "$appDir\Hush!.exe" -PassThru
           Start-Sleep -Seconds 12
           if ($p.HasExited) { throw "app exited during first launch (code $($p.ExitCode))" }
           Stop-Process -Id $p.Id -Force
@@ -105,4 +105,4 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload ${{ inputs.tag }} dist/GhostMind.exe dist/latest.yml --clobber
+        run: gh release upload ${{ inputs.tag }} dist/Hush.exe dist/latest.yml --clobber

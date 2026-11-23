@@ -1,5 +1,5 @@
 'use strict';
-// GhostMind RENDERER: dual-track local capture.
+// Hush! RENDERER: dual-track local capture.
 //
 //   track "you"  -> your real microphone (exact deviceId from Settings,
 //                   via getUserMedia)

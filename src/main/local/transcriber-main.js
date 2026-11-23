@@ -1,9 +1,9 @@
 'use strict';
-// GhostMind MAIN process: local transcription manager.
+// Hush! MAIN process: local transcription manager.
 // Drop-in replacement for startHelperServer() — instead of a Chrome tab
 // POSTing to localhost:8844, this spawns the Python sidecar once, keeps
 // the Whisper model loaded, and feeds it WAV segments over stdin.
-// Results are sent to the renderer on the SAME channels GhostMind
+// Results are sent to the renderer on the SAME channels Hush!
 // already consumes: 'external-transcript' and 'external-state'.
 // The renderer/AI code does not change.
 

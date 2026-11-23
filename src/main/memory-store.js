@@ -1,5 +1,5 @@
 'use strict';
-// GhostMind session-memory store (v3.2).
+// Hush! session-memory store (v3.2).
 //
 // Sessions (conversation summaries) used to live in a flat sessions.json
 // that was rewritten wholesale and capped by slicing. They now live in a

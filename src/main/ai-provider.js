@@ -1,6 +1,6 @@
 'use strict';
 // ─── v3.12 MULTI-PROVIDER AI LAYER ──────────────────────────────────────────
-// GhostMind's renderer speaks one canonical dialect (Anthropic-style
+// Hush!'s renderer speaks one canonical dialect (Anthropic-style
 // messages: { role, content: string | [{type:'text'|'image', ...}] } and
 // expects Anthropic-shaped replies: { content: [{ type:'text', text }] }).
 // This module translates that dialect to and from OpenAI's Chat Completions

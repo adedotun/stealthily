@@ -1,5 +1,5 @@
 'use strict';
-// GhostMind MAIN process: native system-audio capture manager (v3.6).
+// Hush! MAIN process: native system-audio capture manager (v3.6).
 //
 // Spawns the ScreenCaptureKit helper (native/system-audio — packaged via
 // extraResources, see package.json) in --stream mode and forwards its
@@ -10,7 +10,7 @@
 //
 // Wire format from the helper's stdout: UInt32 little-endian payload
 // byte count, then that many bytes of Int16 PCM. Helper logs go to its
-// stderr and are mirrored to GhostMind's debug log. Status and failures
+// stderr and are mirrored to Hush!'s debug log. Status and failures
 // are reported on 'sysaudio-status' — a dead capture is never silent.
 
 const { spawn } = require('child_process');
@@ -73,7 +73,7 @@ class SystemAudioCapture {
       if (/NO_DEVICE/i.test(this._stderrTail)) {
         message = 'No playback device found — call audio capture needs a default output device (speakers or headphones) that is not muted or disconnected.';
       } else if (/-3801|declined TCC|permission/i.test(this._stderrTail)) {
-        message = 'System audio needs the Screen & System Audio Recording permission — check System Settings → Privacy & Security → Screen & System Audio Recording and make sure GhostMind is switched on, then start listening again.';
+        message = 'System audio needs the Screen & System Audio Recording permission — check System Settings → Privacy & Security → Screen & System Audio Recording and make sure Hush! is switched on, then start listening again.';
       } else if (/STREAM STOPPED/i.test(this._stderrTail)) {
         message = 'macOS stopped the system audio stream. Start listening again to retry.';
       }

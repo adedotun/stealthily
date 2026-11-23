@@ -9,7 +9,7 @@
 // clicks, keyboard hits).
 //
 // One Segmenter per speaker track. Tracks never mix — that is what gives
-// GhostMind speaker labels for free: track "you" = mic, track "them" =
+// Hush! speaker labels for free: track "you" = mic, track "them" =
 // the Mac's system audio feed.
 
 class Segmenter {

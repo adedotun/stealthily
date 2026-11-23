@@ -1,4 +1,4 @@
-# 👻 GhostMind v3.5 — Native Electron App
+# 👻 Hush! v3.5 — Native Electron App
 
 Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Windows.
 **v2.1 headline change:** transcription is now fully local and on-device. The old Chrome Helper (a Google Chrome tab on `localhost:8844` using Google's speech service) and the OpenAI Whisper API option are **removed** — see [What changed in v2.1](#what-changed-in-v21).
@@ -14,7 +14,7 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 **v3.10:** Windows reaches full parity — a WASAPI loopback helper gives Windows the same driver-free call audio as macOS, CI verifies the whole Windows model (sidecar, helper, install, first launch), and the installer no longer demands admin rights — see [What changed in v3.10](#what-changed-in-v310).
 **v3.10.1:** macOS floor fix — the call-audio helper was accidentally built requiring macOS 27; it now targets macOS 13 (Ventura), so the full app runs on macOS 13 and later — see [What changed in v3.10.1](#what-changed-in-v3101).
 **v3.11:** Windows gets real acrylic glass, and transcription is redesigned — merged speaker turns, an in-place live tail, a listening strip with live level meters, and auto-scroll that respects reading — see [What changed in v3.11](#what-changed-in-v311).
-**v3.11.1:** full-screen overlay fix — GhostMind now runs as an accessory (agent) app so its window joins other apps’ full-screen Spaces instead of vanishing — see [What changed in v3.11.1](#what-changed-in-v3111).
+**v3.11.1:** full-screen overlay fix — Hush! now runs as an accessory (agent) app so its window joins other apps’ full-screen Spaces instead of vanishing — see [What changed in v3.11.1](#what-changed-in-v3111).
 **v3.12.3:** the hide/show toggle is truly fixed — the show path was calling a helper that had been accidentally defined inside another function, so every show threw and aborted before the window could appear — see [What changed in v3.12.3](#what-changed-in-v3123).
 **v3.13:** the updater gets a face — a button in the status popover that checks, downloads, and restarts to install, with a dot on the status pill when an update is waiting — see [What changed in v3.13](#what-changed-in-v313).
 **v3.13.2:** macOS updates now actually install — the app applies the downloaded update itself instead of relying on the built-in installer that silently no-ops — see [What changed in v3.13.2](#what-changed-in-v3132).
@@ -24,18 +24,18 @@ Stealth AI assistant. Invisible to screen capture. Runs natively on macOS and Wi
 
 ## ⬇ Download
 
-**[Download GhostMind for Mac (.dmg)](https://github.com/adedotun/stealthily/releases/latest/download/GhostMind.dmg)** — this link always serves the latest stable release. ([.zip version](https://github.com/adedotun/stealthily/releases/latest/download/GhostMind.zip) if you prefer.)
+**[Download Hush! for Mac (.dmg)](https://github.com/adedotun/stealthily/releases/latest/download/Hush.dmg)** — this link always serves the latest stable release. ([.zip version](https://github.com/adedotun/stealthily/releases/latest/download/Hush.zip) if you prefer.)
 
 - macOS on Apple Silicon.
 - The app is signed but not yet notarized with Apple, so macOS blocks the first launch with an "unidentified developer" warning — there's a one-time, 30-second way through it in **Step 2** of the guide below.
-- You'll need your own [Anthropic API key](https://console.anthropic.com) for the AI answers (the guide shows you how to get one). Hearing the other side of calls needs nothing extra — GhostMind captures your Mac's system audio natively.
+- You'll need your own [Anthropic API key](https://console.anthropic.com) for the AI answers (the guide shows you how to get one). Hearing the other side of calls needs nothing extra — Hush! captures your Mac's system audio natively.
 - Building from source instead? See **Part D** of the guide.
 
 ## Installation Guide
 
 Welcome — let's get you set up. There are two ways in:
 
-- **Just want to use GhostMind?** Follow **Part A** (about five minutes) — that's the whole setup, including hearing the *other side* of your calls: GhostMind captures your Mac's system audio natively, so there's no audio driver to install and nothing to route. **Part B** explains how that works and how to test it.
+- **Just want to use Hush!?** Follow **Part A** (about five minutes) — that's the whole setup, including hearing the *other side* of your calls: Hush! captures your Mac's system audio natively, so there's no audio driver to install and nothing to route. **Part B** explains how that works and how to test it.
 - **Building from source?** Skip to **Part D**.
 
 You don't need to be technical. Every step says what you'll see and how you'll know it worked. The only things you'll need along the way:
@@ -46,50 +46,50 @@ You don't need to be technical. Every step says what you'll see and how you'll k
 ### Part A — Install the app
 
 **Step 1: Download and install.**
-Download the `.dmg` from the link above, open it, and drag **GhostMind** into the **Applications** folder. That's the whole install — the transcription engine is built into the app, so there's no Python or anything else to set up.
+Download the `.dmg` from the link above, open it, and drag **Hush!** into the **Applications** folder. That's the whole install — the transcription engine is built into the app, so there's no Python or anything else to set up.
 
 **Step 2: The first launch (macOS will grumble once — this is normal).**
-Double-click GhostMind in Applications. Because the app isn't yet notarized with Apple, macOS will refuse with a message like *"GhostMind was blocked to protect your Mac"* or *"unidentified developer"*. This happens once, and here's the way through:
+Double-click Hush! in Applications. Because the app isn't yet notarized with Apple, macOS will refuse with a message like *"Hush! was blocked to protect your Mac"* or *"unidentified developer"*. This happens once, and here's the way through:
 
 1. Open **System Settings → Privacy & Security**.
-2. Scroll down — you'll see a line saying GhostMind was blocked, with an **Open Anyway** button. Click it.
+2. Scroll down — you'll see a line saying Hush! was blocked, with an **Open Anyway** button. Click it.
 3. Confirm **Open** on the dialog that follows.
 
-GhostMind opens, and macOS never asks again. *(Terminal-comfortable alternative: `xattr -cr /Applications/GhostMind.app`, then launch normally.)*
+Hush! opens, and macOS never asks again. *(Terminal-comfortable alternative: `xattr -cr /Applications/Hush!.app`, then launch normally.)*
 
 **Step 3: The setup wizard — your API key.**
-GhostMind opens a short setup wizard the first time it runs.
+Hush! opens a short setup wizard the first time it runs.
 
 1. **Get a key:** go to [console.anthropic.com](https://console.anthropic.com), sign up or sign in, open **API Keys**, click **Create Key**, give it any name, and copy the key (it starts with `sk-ant-`). You'll need a little credit on the account for the key to work — Anthropic's billing page handles that.
 2. **Paste it into the wizard** and continue. Your key is stored **encrypted on this Mac** (in the macOS Keychain's secure storage) — it is never sent anywhere except to Anthropic when you ask a question.
-3. **Microphone:** when macOS asks whether GhostMind may use the microphone, click **Allow**. No mic permission, no transcription — the app can't hear you without it.
-4. **Microphone:** the wizard asks which microphone is *you*. Pick your usual mic (for most people, "MacBook Pro Microphone"). The *Them* side needs no picking — GhostMind hears it from your Mac's system audio (Part B explains).
+3. **Microphone:** when macOS asks whether Hush! may use the microphone, click **Allow**. No mic permission, no transcription — the app can't hear you without it.
+4. **Microphone:** the wizard asks which microphone is *you*. Pick your usual mic (for most people, "MacBook Pro Microphone"). The *Them* side needs no picking — Hush! hears it from your Mac's system audio (Part B explains).
 
 **You'll know it worked when** the little pill in the app's top bar turns green and says the AI is connected, and asking a question in the chat gets you an answer.
 
 **Step 4: One more permission — Screen & System Audio Recording.**
 Two features need macOS's **Screen & System Audio Recording** permission: screenshots (Snipe, Cmd+Shift+S) and hearing the other side of your calls (your Mac's system audio). The first time you use either, macOS will prompt you; if it doesn't take effect right away:
 
-1. **System Settings → Privacy & Security → Screen & System Audio Recording** — turn **GhostMind** on.
-2. **Quit GhostMind completely and reopen it.** macOS insists on the restart for this one permission; after that, both features just work.
+1. **System Settings → Privacy & Security → Screen & System Audio Recording** — turn **Hush!** on.
+2. **Quit Hush! completely and reopen it.** macOS insists on the restart for this one permission; after that, both features just work.
 
 **Step 5: Give the first launch a moment.**
-The first time GhostMind starts, it quietly downloads its speech model (about 150 MB) in the background. On a decent connection that's under a minute; on a slow one, a few minutes. It happens **once, ever** — after that, transcription starts in seconds and works completely offline.
+The first time Hush! starts, it quietly downloads its speech model (about 150 MB) in the background. On a decent connection that's under a minute; on a slow one, a few minutes. It happens **once, ever** — after that, transcription starts in seconds and works completely offline.
 
 ### Part B — Hear the other side of the call (built in)
 
-Older versions of GhostMind needed a free virtual audio cable (BlackHole) and a fair amount of routing to hear the other side of a call. **Not anymore.** GhostMind now captures your Mac's **system audio** directly, using the same macOS technology screen recorders use:
+Older versions of Hush! needed a free virtual audio cable (BlackHole) and a fair amount of routing to hear the other side of a call. **Not anymore.** Hush! now captures your Mac's **system audio** directly, using the same macOS technology screen recorders use:
 
-- Whatever your Mac plays — the call app's speaker output, a video, a voice note — GhostMind hears it and labels it **[Them]**.
+- Whatever your Mac plays — the call app's speaker output, a video, a voice note — Hush! hears it and labels it **[Them]**.
 - There's **no driver to install, no Multi-Output device to build, and no sound settings to change**. Your call apps keep working exactly as they did.
 - It rides on the **Screen & System Audio Recording** permission from Step A4 — if you skipped that step, do it now and reopen the app once.
 
 Two honest consequences of hearing *everything* the Mac plays:
 
 - **Notification sounds and music are in the mix too.** A notification ding mid-call is part of the system audio. If it distracts you, silence notifications during calls (macOS Focus / Do Not Disturb). Speech is what Whisper transcribes; dings mostly pass through unnoticed.
-- **Use headphones on calls when you can.** If the other person's voice comes out of your speakers, your microphone hears it too, and the transcript can show an echo. GhostMind quietly suppresses exact echo copies it recognises, but headphones remove the problem at the source.
+- **Use headphones on calls when you can.** If the other person's voice comes out of your speakers, your microphone hears it too, and the transcript can show an echo. Hush! quietly suppresses exact echo copies it recognises, but headphones remove the problem at the source.
 
-**Try it without a call:** play any video with someone talking, then press **🎧 Start Listening** in GhostMind. You should see the video's speech arrive labelled **[Them]**, and your own voice labelled **[You]**. If the voice on the video asks a question, watch closely — GhostMind hears it and answers automatically. That's the whole trick working end to end.
+**Try it without a call:** play any video with someone talking, then press **🎧 Start Listening** in Hush!. You should see the video's speech arrive labelled **[Them]**, and your own voice labelled **[You]**. If the voice on the video asks a question, watch closely — Hush! hears it and answers automatically. That's the whole trick working end to end.
 
 ### Part C — Check yourself in ten seconds
 
@@ -101,13 +101,13 @@ Any time something feels off, open **Settings → 🩺 Run checks**. It tests ev
 |---|---|
 | macOS won't open the app / "unidentified developer" | Notarization is still pending — do the one-time **Open Anyway** in Step A2. |
 | The AI pill is red / no answers come back | The API key is missing, mistyped, or the Anthropic account has no credit. Re-paste the key in Settings and check the account balance at console.anthropic.com. |
-| I see **[You]** but the call side is silent | Call audio rides on the **Screen & System Audio Recording** permission — check GhostMind is ON in that pane (Step A4), then quit and reopen the app. Also make sure the call itself is audible (volume up, not muted in the call app) and test with a video (Part B). 🩺 Run checks has a "Call audio" row that flags a missing capture helper. |
+| I see **[You]** but the call side is silent | Call audio rides on the **Screen & System Audio Recording** permission — check Hush! is ON in that pane (Step A4), then quit and reopen the app. Also make sure the call itself is audible (volume up, not muted in the call app) and test with a video (Part B). 🩺 Run checks has a "Call audio" row that flags a missing capture helper. |
 | Notification dings and music show up as **[Them]** | **[Them]** is everything your Mac plays (Part B) — that's by design. Silence notifications during calls (Focus / Do Not Disturb) if it bothers you. |
 | The other person's words also appear as **[You]** | That's your speakers feeding your microphone — an echo, not a mix-up: the two tracks come from physically separate sources. Use headphones, or lower the speaker volume. |
 | People on the call can hear themselves | Your call app's **microphone** is set to something other than your real mic (a virtual device, or your speakers echoing into it). Set the call app's microphone back to your real microphone and try headphones. |
 | The first transcription seems stuck | It's the one-time model download (Step A5). Give it a minute on a first-ever launch — after that, starts are quick. |
-| Snipe screenshots come out black or nothing happens | The Screen Recording permission from Step A4 — turn GhostMind on in Privacy & Security, then quit and reopen the app once. |
-| Something mentions `localhost:8844`, a Chrome helper tab, or an OpenAI key | That's GhostMind v2 — long gone. This guide is the current one. |
+| Snipe screenshots come out black or nothing happens | The Screen Recording permission from Step A4 — turn Hush! on in Privacy & Security, then quit and reopen the app once. |
+| Something mentions `localhost:8844`, a Chrome helper tab, or an OpenAI key | That's Hush! v2 — long gone. This guide is the current one. |
 
 ### Part D — Building from source (developers)
 
@@ -135,7 +135,7 @@ Smoke tests without a call: `npm run test:local` for the segmenter unit tests, a
 
 ## Why this is invisible
 
-GhostMind uses a single OS-level call that makes the window **structurally excluded** from the screen capture pipeline:
+Hush! uses a single OS-level call that makes the window **structurally excluded** from the screen capture pipeline:
 
 | Platform | Method | Effect |
 |---|---|---|
@@ -156,7 +156,7 @@ Full AI chat with Claude (default model `claude-sonnet-5-5`, selectable in Setti
   - **Keyboard selection:** arrow keys move a selection box, `Alt`+arrows resize it, `Shift` gives 1px fine steps, `Enter` captures
   - **Full-screen capture:** `Cmd+Shift+F` grabs the whole screen with no overlay at all
 - Your pointer is **hidden** for the whole snipe (v2.3), and the guide lines and selection box live inside the capture-protected overlay — a screen-share audience sees a still screen and no pointer: nothing moves, nothing appears
-- GhostMind captures it, no picker dialog, no yellow border
+- Hush! captures it, no picker dialog, no yellow border
 - One-click: **Solve** / **Explain** / **Extract text** / **Debug** or a custom question
 - The screenshot goes to Claude with vision
 
@@ -183,7 +183,7 @@ When enabled:
 - Up to **10** sessions stored locally
 
 ### ⌨️ Global hotkeys
-Work from any app, even when GhostMind is hidden:
+Work from any app, even when Hush! is hidden:
 - `Cmd/Ctrl+Shift+G` — toggle visibility
 - `Cmd/Ctrl+Shift+S` — Snipe mode
 - `Cmd/Ctrl+Shift+A` — show + focus input
@@ -254,8 +254,8 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 ## What changed in v3.11.1
 
-- **Fixed: GhostMind now overlays other apps in full screen.** The window had every standard setting (all-Spaces visibility, full-screen auxiliary, screen-saver z-order) — but it also passed `skipTransformProcessType: true`, which kept the app a regular process, and a regular app's windows cannot join another app's full-screen Space on modern macOS. GhostMind now runs with the **accessory (agent) activation policy**, matching its dockless design, and re-asserts its all-Spaces/full-screen presence on every show, since macOS can drop a window from a full-screen Space across hide/show cycles. This covers ordinary full-screen apps — browsers, Zoom/Teams, documents, video. (A few modes still sit above everything by design: Keynote/PowerPoint slideshow and proctoring software.)
-- Windows is unchanged in this release — the v3.11.0 `GhostMind.exe` is attached here as-is so the download links keep working.
+- **Fixed: Hush! now overlays other apps in full screen.** The window had every standard setting (all-Spaces visibility, full-screen auxiliary, screen-saver z-order) — but it also passed `skipTransformProcessType: true`, which kept the app a regular process, and a regular app's windows cannot join another app's full-screen Space on modern macOS. Hush! now runs with the **accessory (agent) activation policy**, matching its dockless design, and re-asserts its all-Spaces/full-screen presence on every show, since macOS can drop a window from a full-screen Space across hide/show cycles. This covers ordinary full-screen apps — browsers, Zoom/Teams, documents, video. (A few modes still sit above everything by design: Keynote/PowerPoint slideshow and proctoring software.)
+- Windows is unchanged in this release — the v3.11.0 `Hush.exe` is attached here as-is so the download links keep working.
 
 ## What changed in v3.13.4
 
@@ -264,7 +264,7 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 ## What changed in v3.13.2
 
-- **macOS: "Restart to update" now works.** The v3.13.0 end-to-end proof (against a purpose-published v3.13.1) showed detection and download working perfectly — and the built-in Squirrel installer then silently doing nothing on restart, a known weak point for apps signed with a development identity rather than a Developer ID. The Mac install step is now GhostMind's own: a small detached helper waits for the app to quit, swaps the bundle in /Applications with the downloaded one, and relaunches it. Same bundle ID and signing identity, so permissions, settings, and sessions carry over untouched. Windows keeps the standard installer path, which works there.
+- **macOS: "Restart to update" now works.** The v3.13.0 end-to-end proof (against a purpose-published v3.13.1) showed detection and download working perfectly — and the built-in Squirrel installer then silently doing nothing on restart, a known weak point for apps signed with a development identity rather than a Developer ID. The Mac install step is now Hush!'s own: a small detached helper waits for the app to quit, swaps the bundle in /Applications with the downloaded one, and relaunches it. Same bundle ID and signing identity, so permissions, settings, and sessions carry over untouched. Windows keeps the standard installer path, which works there.
 
 
 ## What changed in v3.13
@@ -281,7 +281,7 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 ## What changed in v3.12.1
 
-- **"Hidden and won't come back" fixed.** GhostMind tracked window visibility with a hand-maintained flag that could go stale when macOS hid the window outside the app's own hide path — the toggle hotkey then "hid" an already-hidden window and the app seemed impossible to summon. Visibility is now synced from the window's real show/hide events, the toggle judges the window itself, showing recreates a missing window and un-minimizes a minimized one, and relaunching the app while it runs uses the same hardened path. Hide/show transitions are logged, so any recurrence is diagnosable.
+- **"Hidden and won't come back" fixed.** Hush! tracked window visibility with a hand-maintained flag that could go stale when macOS hid the window outside the app's own hide path — the toggle hotkey then "hid" an already-hidden window and the app seemed impossible to summon. Visibility is now synced from the window's real show/hide events, the toggle judges the window itself, showing recreates a missing window and un-minimizes a minimized one, and relaunching the app while it runs uses the same hardened path. Hide/show transitions are logged, so any recurrence is diagnosable.
 
 ## What changed in v3.12
 
@@ -295,18 +295,18 @@ Hotkey → main creates sniper window → user drags region → IPC rect
 
 - **Windows gets the glass.** The frosted look on macOS comes from system vibrancy, which Windows ignores — the Windows window was plain transparent with nothing for the panels' blur to bite on. The main window now requests DWM **acrylic** (`backgroundMaterial`) on Windows, so Windows 11 renders real frosted glass behind the app, matching the Mac feel. Where the OS does not support it, it is silently ignored and the previous look remains.
 - **Transcription, redesigned.** Consecutive lines from the same speaker now **merge into one turn** (a new bubble only on a speaker change or a 25-second pause) instead of one bubble per sentence. The live “still speaking” text is a **faded tail inside the speaker's open turn** that solidifies in place when the final lands, replacing the detached jumping line. Speaker names became small captions above each turn.
-- **A listening strip** sits at the top of the transcript while capturing: a pulsing dot, the session clock, and **live level meters for You and Caller** (fed by the capture pipeline itself), so you can see GhostMind hearing both sides.
+- **A listening strip** sits at the top of the transcript while capturing: a pulsing dot, the session clock, and **live level meters for You and Caller** (fed by the capture pipeline itself), so you can see Hush! hearing both sides.
 - **Auto-scroll respects reading.** The transcript only follows new lines while you are at the bottom; scroll up and it stays put, offering a **↓ Live** pill to jump back.
 - Echo suppression (v3.8.1) is sentence-aware now: each sentence is its own span inside a merged turn, so an echoed sentence can still be dropped or handed to the Caller without touching the rest of the turn.
 
 ## What changed in v3.10.1
 
 - **Fixed: the macOS build now runs on macOS 13 (Ventura) and later.** The ScreenCaptureKit system-audio helper had been compiled on macOS 27 with no deployment target, so the binary itself refused to run on anything older and call audio silently died on macOS 13–26 — the app shell (Electron) was fine at 12 all along. The helper is now built with an explicit `arm64-apple-macos13.0` target (13 is ScreenCaptureKit audio's own floor), the one macOS-15-only setting is availability-guarded, and the app declares `minimumSystemVersion: 13.0` so the promise is honest. Verified: helper binary reports minos 13.0, captures with a strong signal, and the installed app declares 13.0.
-- Windows is unchanged in this release — the v3.10.0 `GhostMind.exe` is attached here as-is so the download links keep working.
+- Windows is unchanged in this release — the v3.10.0 `Hush.exe` is attached here as-is so the download links keep working.
 
 ## What changed in v3.10
 
-Windows parity. GhostMind's [Them] call-audio track was macOS-only (ScreenCaptureKit); v3.10 adds a Windows WASAPI loopback helper (`native/system-audio-win`, C# + NAudio, self-contained — no .NET runtime needed on the target PC) that emits the identical framed-PCM stream, so the app cannot tell the platforms apart. The main process resolves the right helper per platform, with a plain-language error when no playback device exists. The Windows release workflow now builds everything on a Windows runner and proves it before attaching the installer: the Whisper sidecar transcribes a speech fixture, the loopback helper's frame stream is validated, and the packaged app passes a silent install + first-launch test with both helpers confirmed inside the install. The Windows installer also drops its administrator requirement (per-user install). The one remaining gap on both platforms is a paid code-signing certificate (Gatekeeper/SmartScreen first-launch warnings until then) — a purchase, not code.
+Windows parity. Hush!'s [Them] call-audio track was macOS-only (ScreenCaptureKit); v3.10 adds a Windows WASAPI loopback helper (`native/system-audio-win`, C# + NAudio, self-contained — no .NET runtime needed on the target PC) that emits the identical framed-PCM stream, so the app cannot tell the platforms apart. The main process resolves the right helper per platform, with a plain-language error when no playback device exists. The Windows release workflow now builds everything on a Windows runner and proves it before attaching the installer: the Whisper sidecar transcribes a speech fixture, the loopback helper's frame stream is validated, and the packaged app passes a silent install + first-launch test with both helpers confirmed inside the install. The Windows installer also drops its administrator requirement (per-user install). The one remaining gap on both platforms is a paid code-signing certificate (Gatekeeper/SmartScreen first-launch warnings until then) — a purchase, not code.
 
 ## What changed in v3.9
 
@@ -338,7 +338,7 @@ Declutter, with zero functionality removed. The window now **auto-collapses** to
 
 ## What changed in v3.5.9
 
-- **Secure Event Input while GhostMind is focused.** Monitoring software that watches keystrokes system-wide works through CGEvent taps. While any GhostMind window is focused, the app now enables macOS Secure Event Input (the mechanism behind Terminal's "Secure Keyboard Entry" and password fields), and event taps receive no keyboard events at all — nothing typed into GhostMind can be observed. It releases the moment no GhostMind window is focused, and on quit. A tiny native helper (`native/secure-input`, a raw N-API wrapper over the Carbon calls) ships inside the app; if it ever fails to load, the feature quietly disables itself and everything else keeps working. Status shows in Settings → 🩺 Run checks. Note: macOS offers no equivalent shield for mouse events — clicks remain visible to a permitted monitor, which is why GhostMind's flows are keyboard-first.
+- **Secure Event Input while Hush! is focused.** Monitoring software that watches keystrokes system-wide works through CGEvent taps. While any Hush! window is focused, the app now enables macOS Secure Event Input (the mechanism behind Terminal's "Secure Keyboard Entry" and password fields), and event taps receive no keyboard events at all — nothing typed into Hush! can be observed. It releases the moment no Hush! window is focused, and on quit. A tiny native helper (`native/secure-input`, a raw N-API wrapper over the Carbon calls) ships inside the app; if it ever fails to load, the feature quietly disables itself and everything else keeps working. Status shows in Settings → 🩺 Run checks. Note: macOS offers no equivalent shield for mouse events — clicks remain visible to a permitted monitor, which is why Hush!'s flows are keyboard-first.
 
 ## What changed in v3.5.8
 
@@ -387,7 +387,7 @@ Declutter, with zero functionality removed. The window now **auto-collapses** to
 - **A model list that can't go stale.** The Settings model picker is populated from the Anthropic API's live model list (your saved model is always kept as an option); the built-in list remains as a fallback when offline. This removes the failure mode that broke chat when a hardcoded model was retired.
 - **🩺 Run checks.** A Health Check button in Settings verifies, in plain English: API key saved, AI answering, microphone present, call-audio device (BlackHole/Loopback) present, and the transcription engine ready — each with a fix hint when it fails.
 - **Smarter transcription.** Final segments now pass through faster-whisper's built-in **Silero VAD** filter, stripping non-speech (breaths, keyboard, room noise) that produced phantom lines (partials skip it for speed). The segmenter gained a **300ms pre-roll** so word onsets are no longer clipped, and an **adaptive noise floor** that makes it more sensitive in quiet rooms without changing behaviour in noise. Segmenter tests still pass 5/5.
-- **Echo guard.** If your mic starts transcribing the caller's own words back as "You" (speaker leak), GhostMind warns you once a minute with the fix: headphones, or check the call app's mic routing.
+- **Echo guard.** If your mic starts transcribing the caller's own words back as "You" (speaker leak), Hush! warns you once a minute with the fix: headphones, or check the call app's mic routing.
 - **Compact mode.** A 🗗 Compact button on the home bar hides chat/input and shrinks the window to the Listen button + pills + live transcript for during-call minimalism; 🗖 Expand restores.
 - **Live suggestion chips.** When the caller asks a question, one-tap chips appear over the transcript — ✍️ Draft my reply, ❓ Explain that, 📋 Summarize so far — and dismiss themselves after 25 seconds.
 - **Export + ask your history.** The Memory tab can export the current session (transcript + chat) as a Markdown file to Downloads, and **Ask my past sessions** answers questions over your saved session summaries, saying so plainly when they don't cover the question.
@@ -396,22 +396,22 @@ Declutter, with zero functionality removed. The window now **auto-collapses** to
 
 1. `npm install` (picks up electron-updater if not yet installed)
 2. `npm run setup:sidecar` then `npm run build:sidecar` — builds the bundled `ghostmind-whisper` engine into `sidecar/bin/` (macOS only; must be built on a Mac)
-3. `npm run build:mac` — produces `dist/GhostMind.dmg`, `dist/GhostMind.zip`, `dist/latest-mac.yml`
-4. GitHub → Releases → Draft new release, tag `v3.4.0`, attach all three files, publish (not prerelease) — the evergreen link `https://github.com/adedotun/stealthily/releases/latest/download/GhostMind.dmg` then serves this build
+3. `npm run build:mac` — produces `dist/Hush.dmg`, `dist/Hush.zip`, `dist/latest-mac.yml`
+4. GitHub → Releases → Draft new release, tag `v3.4.0`, attach all three files, publish (not prerelease) — the evergreen link `https://github.com/adedotun/stealthily/releases/latest/download/Hush.dmg` then serves this build
 5. Verify auto-update: install the previous release, then launch it after publishing — it should offer this update
-6. Verify stealth on Webex: join a Webex meeting from a phone as guest, share the Mac screen, confirm GhostMind is invisible on the phone's view
+6. Verify stealth on Webex: join a Webex meeting from a phone as guest, share the Mac screen, confirm Hush! is invisible on the phone's view
 7. Note: the app is unsigned — first-open needs right-click → Open until an Apple Developer certificate is added
 
 ## What changed in v3.3
 
 - **Streaming chat.** Chat answers now arrive token by token (Anthropic SSE → `ai-stream-chunk` events → the answer types itself into the bubble) instead of appearing only after the full response completes. First words show in well under a second. Copilot auto-answers and the summary features still use the non-streaming path.
 - **No more thinking pause.** The current models think adaptively before answering, which delayed every reply. Thinking is now disabled by default; turn on **Deep Thinking** in Settings when you want slower, more thorough answers.
-- **A sharper default prompt.** The system prompt was rewritten for how GhostMind is actually used: lead with the answer, keep it tight and scannable, be specific and actionable, draft say-it-out-loud replies from live transcript context. If your saved prompt is still the untouched old default, it upgrades automatically; a prompt you edited yourself is never touched.
+- **A sharper default prompt.** The system prompt was rewritten for how Hush! is actually used: lead with the answer, keep it tight and scannable, be specific and actionable, draft say-it-out-loud replies from live transcript context. If your saved prompt is still the untouched old default, it upgrades automatically; a prompt you edited yourself is never touched.
 - **Model currency fixes (from the v3.2 test pass).** Anthropic retired `claude-sonnet-4-5-20250929` (HTTP 404), so defaults moved to `claude-sonnet-5-5` / `claude-haiku-5-5`, retired saved models migrate on launch, a 404 retries once with the current model, the Settings model list offers only current models, and responses are normalized so a thinking block can no longer render as an empty reply.
 
 ## What changed in v3.2
 
-- **Live partial transcription.** While a person is mid-sentence, GhostMind now shows provisional words (dimmed, italic, marked with …) that update as they speak, then get replaced by the polished final line. Implemented as segmenter snapshots → provisional sidecar passes flagged `partial` end-to-end (capture → main → sidecar → renderer), with at most one partial in flight per speaker track so finals are never starved.
+- **Live partial transcription.** While a person is mid-sentence, Hush! now shows provisional words (dimmed, italic, marked with …) that update as they speak, then get replaced by the polished final line. Implemented as segmenter snapshots → provisional sidecar passes flagged `partial` end-to-end (capture → main → sidecar → renderer), with at most one partial in flight per speaker track so finals are never starved.
 - **SQLite session memory.** Sessions moved from a flat `sessions.json` to a real database (`ghostmind.db`, Node's built-in `node:sqlite` — no new dependencies), retaining the last 200 sessions while the app still surfaces the most recent 10. The old JSON file is migrated automatically on first run and remains as a fallback if SQLite is unavailable.
 - **Memory search.** The Memory tab has a search box — past sessions filter as you type.
 
@@ -420,7 +420,7 @@ Declutter, with zero functionality removed. The window now **auto-collapses** to
 - **Your API key now lives in the Keychain.** Settings are saved with the key encrypted via Electron `safeStorage` (macOS Keychain / Windows DPAPI) as `apiKeyEnc` — the plaintext key no longer sits in `settings.json`. Existing installs migrate automatically on first launch.
 - **Faster transcription.** Segments flush after ~0.55s of silence (was 0.8s) and long monologues surface every ~8s (was 15s), so words appear noticeably sooner.
 - **Live summary.** While listening, a 🧭 "So far: …" line in the transcript bar quietly refreshes as the call develops.
-- **Post-call magic.** When you stop listening after a real conversation, GhostMind automatically writes a **call summary** (decisions, action items) and a **follow-up email draft**, each with a one-tap Copy button.
+- **Post-call magic.** When you stop listening after a real conversation, Hush! automatically writes a **call summary** (decisions, action items) and a **follow-up email draft**, each with a one-tap Copy button.
 - **One-click install groundwork.** `npm run build:sidecar` (PyInstaller spec in `sidecar/ghostmind-whisper.spec`) produces a standalone `ghostmind-whisper` engine in `sidecar/bin/`; the app prefers it automatically when present, so packaged installs need **no Python**. Build order for a fully bundled DMG: `npm run setup:sidecar` → `npm run build:sidecar` → `npm run build:mac`.
 - **Auto-update.** Packaged builds check this repo's GitHub Releases once at launch (electron-updater, `build.publish` in package.json) and offer updates through the standard dialog. Dev builds are unaffected.
 - Note: `npm install` is needed once after upgrading, for the new `electron-updater` dependency.

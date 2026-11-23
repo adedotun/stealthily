@@ -2,7 +2,7 @@ const { _electron: electron } = require('@playwright/test');
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 
-test.describe('GhostMind E2E Tests', () => {
+test.describe('Hush! E2E Tests', () => {
   let electronApp;
 
   test.beforeEach(async () => {
@@ -25,7 +25,7 @@ test.describe('GhostMind E2E Tests', () => {
     }
   });
 
-  // Helper function to get the main GhostMind window without race conditions
+  // Helper function to get the main Hush! window without race conditions
   async function getMainWindow(app) {
     const windows = app.windows();
     if (windows.length > 0) {
@@ -38,16 +38,16 @@ test.describe('GhostMind E2E Tests', () => {
     return win;
   }
 
-  test('Main window should launch and render the GhostMind UI', async () => {
+  test('Main window should launch and render the Hush! UI', async () => {
     const window = await getMainWindow(electronApp);
 
     // Verify window title
     const title = await window.title();
-    expect(title).toBe('GhostMind');
+    expect(title).toBe('Hush!');
 
     // Verify logo and version are displayed
     const logoName = window.locator('#logo-name');
-    await expect(logoName).toHaveText('GhostMind');
+    await expect(logoName).toHaveText('Hush!');
 
     // (The old #logo-version element was removed in the v3.8 redesign;
     // version truth now lives in the diagnostics surface.)
