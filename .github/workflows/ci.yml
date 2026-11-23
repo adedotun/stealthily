@@ -57,9 +57,9 @@ jobs:
           DEBUG: electron-builder
         run: |
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            npm run build:mac -- -c.mac.identity=null
+            npm run build:mac -- -c.mac.identity=null --publish never
           else
-            npm run build:win
+            npm run build:win -- --publish never
           fi
         shell: bash
 
