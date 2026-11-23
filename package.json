@@ -1,7 +1,7 @@
 {
   "build": {
     "appId": "com.ghostmind.app",
-    "artifactName": "GhostMind.${ext}",
+    "artifactName": "Hush.${ext}",
     "asarUnpack": [
       "sidecar/bin/**",
       "node_modules/secure-input/**"
@@ -61,7 +61,7 @@
       "allowToChangeInstallationDirectory": true,
       "oneClick": false
     },
-    "productName": "GhostMind",
+    "productName": "Hush!",
     "win": {
       "target": [
         "nsis"
@@ -91,5 +91,5 @@
     "test": "playwright test",
     "test:local": "node --test tests-local/*.test.js"
   },
-  "version": "3.13.5"
+  "version": "3.14.0"
 }

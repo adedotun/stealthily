@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GhostMind</title>
+<title>Hush!</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -1156,6 +1156,14 @@ body { --cb: #2f6bff; background: transparent; }
 #update-banner-btn { background: #2f6bff; color: #fff; border: none; border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 #update-banner-btn:disabled { opacity: 0.6; cursor: default; }
 body.collapsed #update-banner { display: none !important; }
+#context-pill { display: none; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--acid); color: var(--acid); font-size: 11px; font-family: var(--font-mono); cursor: pointer; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--acid-dim); }
+#context-pill.show { display: inline-flex; }
+body.collapsed #context-pill { display: none !important; }
+#panel-context textarea, #panel-context input[type="text"] { width: 100%; box-sizing: border-box; padding: 8px 11px; border-radius: 8px; border: 1px solid var(--line2); background: var(--bg3); color: var(--text); outline: none; font-family: var(--font-ui); font-size: 12px; }
+#panel-context textarea { line-height: 1.5; resize: vertical; }
+.ctx-profile-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; cursor: pointer; font-size: 12px; }
+.ctx-profile-row.active { border-color: var(--acid); }
+.ctx-profile-row.selected { background: var(--bg3); }
 #status-popover #pills-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 8px; }
 #collapse-caret {
   display: block; width: 8px; height: 8px; margin: auto;
@@ -1249,10 +1257,11 @@ body:not(.call-active) #quick-bar { display: none; }
             <line x1="16" y1="10" x2="19" y2="10" stroke="rgba(0,255,136,0.5)" stroke-width="1"/>
           </svg>
         </div>
-        <span id="logo-name">GhostMind</span>
+        <span id="logo-name">Hush!</span>
       </div>
     </div>
     <div id="titlebar-right">
+      <div id="context-pill" title="Job context active — click to open the Context tab"><span>🎯</span><span id="context-pill-name"></span></div>
       <div id="status-pill">
         <div id="status-dot"></div>
         <span id="status-text">OFFLINE</span>
@@ -1305,6 +1314,10 @@ body:not(.call-active) #quick-bar { display: none; }
     <div class="tab" data-panel="memory">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
       Memory
+    </div>
+    <div class="tab" data-panel="context">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+      Context
     </div>
     <div class="tab" data-panel="settings">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1390,7 +1403,7 @@ body:not(.call-active) #quick-bar { display: none; }
   <!-- PANEL: CHAT -->
   <div class="panel active" id="panel-chat">
     <div id="messages">
-      <div class="msg system"><div class="bubble">GhostMind is ready — invisible to screen capture.</div></div>
+      <div class="msg system"><div class="bubble">Hush! is ready — invisible to screen capture.</div></div>
     </div>
 
 
@@ -1410,7 +1423,7 @@ body:not(.call-active) #quick-bar { display: none; }
             <li><strong>You</strong> — your microphone</li>
             <li><strong>Them</strong> — the other side of the call, captured straight from your Mac's system audio</li>
           </ol>
-          There's nothing to install or route for call audio — GhostMind hears whatever your Mac plays. Just pick your microphone in <strong>Settings → Transcription</strong>.
+          There's nothing to install or route for call audio — Hush! hears whatever your Mac plays. Just pick your microphone in <strong>Settings → Transcription</strong>.
           <button class="snipe-btn" id="local-transcription-toggle-btn" style="margin-top:10px; color:var(--acid);">🎙 Start Transcription</button>
         </div>
       </div>
@@ -1442,6 +1455,49 @@ body:not(.call-active) #quick-bar { display: none; }
         </div>
         <div id="ask-calls-answer" style="display:none;margin-top:8px;font-size:12.5px;line-height:1.55;"></div>
         <button class="snipe-btn" id="export-session-btn" style="margin-top:12px;">⬇ EXPORT CURRENT SESSION (.MD)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL: CONTEXT (v3.14) -->
+  <div class="panel" id="panel-context-panel">
+    <div id="panel-context">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--line);">
+        <span style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--muted2);text-transform:uppercase;">JOB CONTEXT</span>
+        <button class="snipe-btn" id="ctx-new-btn">+ NEW PROFILE</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.6;margin:10px 0;">
+        Load the job description for a role before your call and every live answer is grounded in it — and in your resume, if you add one. Answers never invent experience your resume doesn't show. Profiles stay on this device.
+      </div>
+      <div id="ctx-list"></div>
+      <div id="ctx-editor" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line);">
+        <input type="text" id="ctx-name" placeholder="Profile name — e.g. Acme — QA Engineer" style="margin-bottom:8px;">
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <input type="text" id="ctx-company" placeholder="Company (optional)" style="flex:1;">
+          <input type="text" id="ctx-role" placeholder="Role (optional)" style="flex:1;">
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--muted2);text-transform:uppercase;margin:8px 0 5px;">JOB DESCRIPTION</div>
+        <textarea id="ctx-jd" rows="8" placeholder="Paste the job description here…"></textarea>
+        <div style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;">
+          <button class="snipe-btn" id="ctx-jd-file-btn">LOAD .TXT / .MD</button>
+          <input type="file" id="ctx-jd-file" accept=".txt,.md,.markdown,text/plain" style="display:none;">
+          <span id="ctx-jd-count" style="font-size:11px;color:var(--muted2);"></span>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--muted2);text-transform:uppercase;margin:10px 0 5px;">YOUR RESUME (OPTIONAL)</div>
+        <textarea id="ctx-resume" rows="6" placeholder="Paste your resume here — answers will ground experience claims in it…"></textarea>
+        <div style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;">
+          <button class="snipe-btn" id="ctx-resume-file-btn">LOAD .TXT / .MD</button>
+          <input type="file" id="ctx-resume-file" accept=".txt,.md,.markdown,text/plain" style="display:none;">
+          <span id="ctx-resume-count" style="font-size:11px;color:var(--muted2);"></span>
+        </div>
+        <div id="ctx-token-readout" style="font-size:11px;color:var(--muted2);margin-top:8px;"></div>
+        <div id="ctx-trim-note" style="display:none;font-size:11px;color:#ffb347;margin-top:4px;"></div>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+          <button class="snipe-btn primary" id="ctx-save-btn">SAVE PROFILE</button>
+          <button class="snipe-btn" id="ctx-activate-btn">SET ACTIVE</button>
+          <button class="snipe-btn" id="ctx-delete-btn" style="color:#ff6680;">DELETE</button>
+        </div>
+        <div id="ctx-status" style="font-size:11px;color:var(--acid);margin-top:8px;min-height:14px;"></div>
       </div>
     </div>
   </div>
@@ -1482,7 +1538,7 @@ body:not(.call-active) #quick-bar { display: none; }
         </div>
         <div class="setting-row">
           <label>Call audio (track: Them)</label>
-          <span class="diag-hint">Captured from your Mac's system audio — GhostMind hears the other side of the call directly, so there's no driver to install and nothing to route. Just keep your call volume up.</span>
+          <span class="diag-hint">Captured from your Mac's system audio — Hush! hears the other side of the call directly, so there's no driver to install and nothing to route. Just keep your call volume up.</span>
         </div>
         <div class="setting-row">
           <label>Model</label>
@@ -1521,7 +1577,7 @@ body:not(.call-active) #quick-bar { display: none; }
         </div>
         <div class="setting-row">
           <label>System Prompt</label>
-          <textarea id="s-system" placeholder="You are GhostMind..."></textarea>
+          <textarea id="s-system" placeholder="You are Hush!..."></textarea>
         </div>
       </div>
       <button id="adv-toggle" class="snipe-btn" style="align-self:flex-start;">▸ Advanced settings</button>
@@ -1601,12 +1657,12 @@ body:not(.call-active) #quick-bar { display: none; }
           </div>
         </div>
         <div style="font-size:10px;color:var(--muted2);line-height:1.5;margin-top:-4px;">
-          In dev mode, enable <strong style="color:var(--text-dim);">Electron</strong> (not GhostMind). Restart after granting.
+          In dev mode, enable <strong style="color:var(--text-dim);">Electron</strong> (not Hush!). Restart after granting.
         </div>
       </div>
       <button class="save-btn" id="save-settings-btn">SAVE SETTINGS</button>
       <div style="text-align:center; margin-top:4px;">
-        <button class="snipe-btn" id="quit-btn" style="color:#ff5d73;">⏻ Quit GhostMind (Ctrl+Q)</button>
+        <button class="snipe-btn" id="quit-btn" style="color:#ff5d73;">⏻ Quit Hush! (Ctrl+Q)</button>
       </div>
     </div>
   </div>
@@ -1627,7 +1683,7 @@ body:not(.call-active) #quick-bar { display: none; }
     <div class="wiz-card">
       <div class="wiz-step active" data-step="1">
         <div class="wiz-emoji">👻</div>
-        <div class="wiz-title">Welcome to GhostMind</div>
+        <div class="wiz-title">Welcome to Hush!</div>
         <div class="wiz-sub">Your invisible AI helper for calls and meetings. It listens, transcribes and helps you answer — and nobody on the call can see it. Setup takes about 2 minutes.</div>
         <button class="wiz-btn" id="wiz-start-btn">Let's get set up</button>
         <button class="wiz-skip" id="wiz-skip-1">Skip for now</button>
@@ -1635,7 +1691,7 @@ body:not(.call-active) #quick-bar { display: none; }
       <div class="wiz-step" data-step="2">
         <div class="wiz-emoji">🔑</div>
         <div class="wiz-title">Connect your AI</div>
-        <div class="wiz-sub">GhostMind thinks with Claude. Paste your Anthropic API key below — it's stored only on this computer. You can get one at console.anthropic.com.</div>
+        <div class="wiz-sub">Hush! thinks with Claude. Paste your Anthropic API key below — it's stored only on this computer. You can get one at console.anthropic.com.</div>
         <label class="wiz-label" for="wiz-key">Anthropic API key</label>
         <input class="wiz-input" id="wiz-key" type="password" placeholder="sk-ant-..." autocomplete="off">
         <button class="wiz-btn" id="wiz-key-btn">Save &amp; continue</button>
@@ -1644,7 +1700,7 @@ body:not(.call-active) #quick-bar { display: none; }
       <div class="wiz-step" data-step="3">
         <div class="wiz-emoji">🎙️</div>
         <div class="wiz-title">Check your sound</div>
-        <div class="wiz-sub">Pick your microphone, then tap Test and speak — the green bar should dance. The other side of your calls needs no setup at all: GhostMind hears them straight from your Mac's system audio.</div>
+        <div class="wiz-sub">Pick your microphone, then tap Test and speak — the green bar should dance. The other side of your calls needs no setup at all: Hush! hears them straight from your Mac's system audio.</div>
         <label class="wiz-label" for="wiz-you">Your microphone</label>
         <select class="wiz-select" id="wiz-you"></select>
         <div id="wiz-level"><div id="wiz-level-fill"></div></div>
@@ -1655,9 +1711,9 @@ body:not(.call-active) #quick-bar { display: none; }
       <div class="wiz-step" data-step="4">
         <div class="wiz-emoji">✅</div>
         <div class="wiz-title">One last thing</div>
-        <div class="wiz-sub">macOS may ask GhostMind for two permissions. When it does, click Allow — that's completely normal.</div>
+        <div class="wiz-sub">macOS may ask Hush! for two permissions. When it does, click Allow — that's completely normal.</div>
         <div class="wiz-note">🎙️ <b>Microphone</b> — so it can hear you.<br>🖥️ <b>Screen Recording</b> — only used when <i>you</i> press the screenshot button (Cmd+Shift+S). Nothing is recorded otherwise.</div>
-        <button class="wiz-btn" id="wiz-finish-btn">Done — start using GhostMind</button>
+        <button class="wiz-btn" id="wiz-finish-btn">Done — start using Hush!</button>
       </div>
       <div class="wiz-dots" id="wiz-dots">● ○ ○ ○</div>
     </div>
@@ -1668,14 +1724,14 @@ body:not(.call-active) #quick-bar { display: none; }
     <div class="wiz-card" style="max-width:340px;">
       <div class="wiz-title">Keyboard shortcuts</div>
       <div class="scuts">
-        <div><span>Show / hide GhostMind</span><kbd>⌘⇧G</kbd></div>
+        <div><span>Show / hide Hush!</span><kbd>⌘⇧G</kbd></div>
         <div><span>Snipe a screen region</span><kbd>⌘⇧S</kbd></div>
         <div><span>Capture the full screen</span><kbd>⌘⇧F</kbd></div>
         <div><span>Ask — focus the input</span><kbd>⌘⇧A</kbd></div>
         <div><span>New session (AI forgets this chat)</span><kbd>⌘⇧N</kbd></div>
         <div><span>Send message</span><kbd>Enter</kbd></div>
         <div><span>New line in message</span><kbd>⇧Enter</kbd></div>
-        <div><span>Quit GhostMind</span><kbd>⌃Q</kbd></div>
+        <div><span>Quit Hush!</span><kbd>⌃Q</kbd></div>
         <div><span>This sheet</span><kbd>?</kbd></div>
       </div>
       <div style="font-size:11px;color:var(--muted2);margin-top:10px;">Show/hide and Snipe keys can be changed in Settings → Advanced → Hotkeys.</div>

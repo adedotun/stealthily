@@ -1,4 +1,4 @@
-// GhostMind — Renderer Process
+// Hush! — Renderer Process
 // AI engine, voice capture, waveform, clipboard watcher, proactive intelligence
 
 'use strict';
@@ -245,7 +245,7 @@ function showStartupHints(settings, permissions) {
     addMsg('system', '⚠ No API key — go to Settings, add your Anthropic key, and click Save');
   }
   if (permissions?.screen && permissions.screen !== 'granted') {
-    const appName = 'Electron'; // dev mode; packaged app shows as GhostMind
+    const appName = 'Electron'; // dev mode; packaged app shows as Hush!
     addMsg('system',
       `⚠ Screen Recording not granted (status: ${permissions.screen}). ` +
       `Enable "${appName}" in System Settings → Privacy & Security → Screen Recording, then restart.`);
@@ -300,7 +300,7 @@ async function generatePostCall() {
     const data = await window.ghostmind.sendAIRequest({
       messages: [{ role: 'user', content: transcript }],
       model: gmModelFor(gmProvider()),
-      systemPrompt: 'You are GhostMind. From the call transcript, reply with exactly two sections headed "SUMMARY" and "EMAIL". SUMMARY: 3-5 short bullet lines (decisions, key points, action items with owners). EMAIL: a short, warm follow-up email the user could send (subject line first, then 3-5 sentences, sign off as the user). Plain language. No other text.',
+      systemPrompt: 'You are Hush!. From the call transcript, reply with exactly two sections headed "SUMMARY" and "EMAIL". SUMMARY: 3-5 short bullet lines (decisions, key points, action items with owners). EMAIL: a short, warm follow-up email the user could send (subject line first, then 3-5 sentences, sign off as the user). Plain language. No other text.',
       maxTokens: 700,
     });
     const text = data.content?.[0]?.text?.trim();
@@ -567,14 +567,14 @@ document.getElementById('home-compact-btn')?.addEventListener('click', () => {
 });
 
 document.getElementById('export-session-btn')?.addEventListener('click', async () => {
-  const lines = [`# GhostMind session — ${new Date().toLocaleString()}`];
+  const lines = [`# Hush! session — ${new Date().toLocaleString()}`];
   if (state.transcript.length) {
     lines.push('', '## Call transcript', '', ...state.transcript);
   }
   const chat = (state.messages || []).filter(m => typeof m.content === 'string');
   if (chat.length) {
     lines.push('', '## Chat', '');
-    for (const m of chat) lines.push(`**${m.role === 'user' ? 'You' : 'GhostMind'}:** ${m.content}`, '');
+    for (const m of chat) lines.push(`**${m.role === 'user' ? 'You' : 'Hush!'}:** ${m.content}`, '');
   }
   try {
     const r = await window.ghostmind.exportSession(lines.join('\n'));
@@ -599,7 +599,7 @@ document.getElementById('ask-calls-btn')?.addEventListener('click', async () => 
   try {
     const ctx = state.sessions.map(s => `- ${s.date}: ${s.summary}`).join('\n');
     const data = await window.ghostmind.sendAIRequest({
-      messages: [{ role: 'user', content: `Here are summaries of my past GhostMind sessions:\n\n${ctx}\n\nQuestion: ${q}\n\nAnswer using only these summaries. If they don't cover the question, say so plainly.` }],
+      messages: [{ role: 'user', content: `Here are summaries of my past Hush! sessions:\n\n${ctx}\n\nQuestion: ${q}\n\nAnswer using only these summaries. If they don't cover the question, say so plainly.` }],
       model: gmSmallModel(),
       maxTokens: 600,
     });
@@ -890,7 +890,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelector(`.tab[data-panel="${name}"]`).classList.add('active');
-  const panelMap = { chat: 'panel-chat', audio: 'panel-audio-panel', memory: 'panel-memory-panel', settings: 'panel-settings-panel' };
+  const panelMap = { chat: 'panel-chat', audio: 'panel-audio-panel', memory: 'panel-memory-panel', context: 'panel-context-panel', settings: 'panel-settings-panel' };
   document.getElementById(panelMap[name]).classList.add('active');
 }
 
@@ -898,6 +898,7 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     switchTab(tab.dataset.panel);
     if (tab.dataset.panel === 'memory') loadMemoryPanel();
+    if (tab.dataset.panel === 'context') loadContextPanel();
   });
 });
 
@@ -1064,7 +1065,7 @@ async function askAI(userText, imgB64, apiTextOverride) {
     const text = await streamAIRequest({
       messages: apiMessages,
       model: gmModelFor(gmProvider()),
-      systemPrompt: (state.settings.systemPrompt || 'You are GhostMind, an invisible AI copilot. Lead with the answer, keep it tight and scannable, no preamble.') + (state.settings.codeOnlyMode ? CODE_ONLY_SUFFIX : ''),
+      systemPrompt: (state.settings.systemPrompt || 'You are Hush!, an invisible AI copilot. Lead with the answer, keep it tight and scannable, no preamble.') + (state.settings.codeOnlyMode ? CODE_ONLY_SUFFIX : ''),
       maxTokens: 2048
     }, typingEl);
     typingEl.remove();
@@ -1135,7 +1136,7 @@ async function askCopilotAI(question) {
   // Show user bubble as Copilot Auto-Answer
   addMsg('user', question, null, true);
 
-  const copilotSystemPrompt = "You are GhostMind Copilot. Solve the user's question directly, clearly, and concisely. If it is a coding question, provide working, well-commented code blocks. Keep non-essential explanations to a minimum.";
+  const copilotSystemPrompt = "You are Hush! Copilot. Solve the user's question directly, clearly, and concisely. If it is a coding question, provide working, well-commented code blocks. Keep non-essential explanations to a minimum.";
   
   const apiMessages = state.messages.slice(0, -1);
   const sessionCtx = state.sessions.length > 0
@@ -2002,7 +2003,7 @@ initStealthCursor();
     let note = '';
     updBtn.disabled = false;
     if (st === 'checking') { updBtn.textContent = '⏳ Checking for updates…'; updBtn.disabled = true; }
-    else if (st === 'available') { updBtn.textContent = `⬆ Download update v${updState.version || ''}`; note = `GhostMind v${updState.version || ''} is available.`; }
+    else if (st === 'available') { updBtn.textContent = `⬆ Download update v${updState.version || ''}`; note = `Hush! v${updState.version || ''} is available.`; }
     else if (st === 'downloading') { updBtn.textContent = `⬇ Downloading… ${updState.percent || 0}%`; updBtn.disabled = true; }
     else if (st === 'downloaded') { updBtn.textContent = '🔁 Restart to update'; note = `v${updState.version || ''} is downloaded and ready — restarting applies it.`; }
     else if (st === 'uptodate') { updBtn.textContent = '✓ Up to date'; note = 'You are on the latest version.'; clearTimeout(updIdleTimer); updIdleTimer = setTimeout(() => renderUpdate({ status: 'idle' }), 5000); }
@@ -2015,9 +2016,9 @@ initStealthCursor();
       const show = st === 'available' || st === 'downloading' || st === 'downloaded' || st === 'error';
       updBanner.style.display = show ? 'flex' : 'none';
       if (show) {
-        if (st === 'available') { updBannerText.textContent = `⬆ GhostMind v${updState.version || ''} is available`; updBannerBtn.textContent = 'Download'; updBannerBtn.disabled = false; }
+        if (st === 'available') { updBannerText.textContent = `⬆ Hush! v${updState.version || ''} is available`; updBannerBtn.textContent = 'Download'; updBannerBtn.disabled = false; }
         else if (st === 'downloading') { updBannerText.textContent = `⬇ Downloading update… ${updState.percent || 0}%`; updBannerBtn.textContent = 'Downloading…'; updBannerBtn.disabled = true; }
-        else if (st === 'downloaded') { updBannerText.textContent = `🔁 GhostMind v${updState.version || ''} is ready to install`; updBannerBtn.textContent = 'Restart to update'; updBannerBtn.disabled = false; }
+        else if (st === 'downloaded') { updBannerText.textContent = `🔁 Hush! v${updState.version || ''} is ready to install`; updBannerBtn.textContent = 'Restart to update'; updBannerBtn.disabled = false; }
         else { updBannerText.textContent = '⚠ The update did not complete'; updBannerBtn.textContent = 'Get it manually'; updBannerBtn.disabled = false; }
       }
     }
@@ -2264,4 +2265,193 @@ function gmHideLivePill() { const b = document.getElementById('live-pill'); if (
       if (el) el.style.width = Math.round(disp[k] * 100) + '%';
     }
   }, 150);
+})();
+
+// --- JOB CONTEXT PROFILES (v3.14) ---------------------------------------
+const CTX_JD_CAP = 30000;
+const CTX_RESUME_CAP = 20000;
+let ctxState = { profiles: [], activeId: null };
+let ctxEditingId = null;
+
+function ctxEstimateTokens(text) { return Math.ceil(String(text || '').length / 4); }
+
+function ctxActiveProfile() {
+  return ctxState.profiles.find(p => p.id === ctxState.activeId) || null;
+}
+
+function updateContextPill() {
+  const pill = document.getElementById('context-pill');
+  const nameEl = document.getElementById('context-pill-name');
+  if (!pill || !nameEl) return;
+  const active = ctxActiveProfile();
+  if (active) {
+    nameEl.textContent = active.name;
+    pill.classList.add('show');
+  } else {
+    pill.classList.remove('show');
+  }
+}
+
+async function loadContextPanel() {
+  try {
+    const data = await window.ghostmind.listContextProfiles();
+    ctxState = { profiles: data.profiles || [], activeId: data.activeId || null };
+  } catch (_) {}
+  renderCtxList();
+  updateContextPill();
+  updateCtxActivateBtn();
+}
+
+function renderCtxList() {
+  const list = document.getElementById('ctx-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!ctxState.profiles.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--muted2);padding:4px 0;">No profiles yet - paste a job description below and save.</div>';
+    return;
+  }
+  for (const p of ctxState.profiles) {
+    const row = document.createElement('div');
+    row.className = 'ctx-profile-row' + (p.id === ctxState.activeId ? ' active' : '') + (p.id === ctxEditingId ? ' selected' : '');
+    const label = document.createElement('span');
+    label.style.flex = '1';
+    label.textContent = p.name + (p.id === ctxState.activeId ? ' - ACTIVE' : '');
+    row.appendChild(label);
+    const tok = document.createElement('span');
+    tok.style.color = 'var(--muted2)';
+    tok.style.fontSize = '11px';
+    tok.textContent = '~ ' + (ctxEstimateTokens(p.jdText) + ctxEstimateTokens(p.resumeText)).toLocaleString() + ' tok';
+    row.appendChild(tok);
+    row.addEventListener('click', () => fillCtxEditor(p));
+    list.appendChild(row);
+  }
+}
+
+function fillCtxEditor(p) {
+  ctxEditingId = p ? p.id : null;
+  document.getElementById('ctx-name').value = p ? (p.name || '') : '';
+  document.getElementById('ctx-company').value = p ? (p.company || '') : '';
+  document.getElementById('ctx-role').value = p ? (p.role || '') : '';
+  document.getElementById('ctx-jd').value = p ? (p.jdText || '') : '';
+  document.getElementById('ctx-resume').value = p ? (p.resumeText || '') : '';
+  document.getElementById('ctx-trim-note').style.display = 'none';
+  updateCtxReadout();
+  renderCtxList();
+  updateCtxActivateBtn();
+}
+
+function updateCtxActivateBtn() {
+  const btn = document.getElementById('ctx-activate-btn');
+  if (!btn) return;
+  btn.textContent = (ctxEditingId && ctxEditingId === ctxState.activeId) ? 'DEACTIVATE' : 'SET ACTIVE';
+}
+
+function updateCtxReadout() {
+  const jdEl = document.getElementById('ctx-jd');
+  if (!jdEl) return;
+  const jd = jdEl.value;
+  const resume = document.getElementById('ctx-resume').value;
+  document.getElementById('ctx-jd-count').textContent = jd.length.toLocaleString() + ' / ' + CTX_JD_CAP.toLocaleString() + ' chars';
+  document.getElementById('ctx-resume-count').textContent = resume.length.toLocaleString() + ' / ' + CTX_RESUME_CAP.toLocaleString() + ' chars';
+  const tokens = ctxEstimateTokens(jd) + ctxEstimateTokens(resume);
+  document.getElementById('ctx-token-readout').textContent = tokens
+    ? '~ ' + tokens.toLocaleString() + ' tokens ride along with each answer while this profile is active.'
+    : '';
+}
+
+function ctxStatus(msg) {
+  const el = document.getElementById('ctx-status');
+  if (el) el.textContent = msg || '';
+}
+
+function ctxCollectEditor() {
+  return {
+    id: ctxEditingId || undefined,
+    name: document.getElementById('ctx-name').value.trim(),
+    company: document.getElementById('ctx-company').value.trim() || null,
+    role: document.getElementById('ctx-role').value.trim() || null,
+    jdText: document.getElementById('ctx-jd').value,
+    resumeText: document.getElementById('ctx-resume').value,
+  };
+}
+
+async function ctxSave() {
+  const data = ctxCollectEditor();
+  if (!data.jdText.trim()) { ctxStatus('Paste a job description first - that is the minimum a profile needs.'); return false; }
+  const res = await window.ghostmind.saveContextProfile(data);
+  if (res && res.ok) {
+    ctxEditingId = res.profile.id;
+    const note = document.getElementById('ctx-trim-note');
+    if (res.trimmed && (res.trimmed.jd || res.trimmed.resume)) {
+      const parts = [];
+      if (res.trimmed.jd) parts.push('job description trimmed to ' + CTX_JD_CAP.toLocaleString() + ' characters');
+      if (res.trimmed.resume) parts.push('resume trimmed to ' + CTX_RESUME_CAP.toLocaleString() + ' characters');
+      note.textContent = 'Heads up: ' + parts.join(' and ') + ' (the caps keep answer costs sane).';
+      note.style.display = 'block';
+      document.getElementById('ctx-jd').value = res.profile.jdText || '';
+      document.getElementById('ctx-resume').value = res.profile.resumeText || '';
+    } else {
+      note.style.display = 'none';
+    }
+    ctxStatus('Saved "' + res.profile.name + '".');
+    await loadContextPanel();
+    fillCtxEditor(res.profile);
+    return true;
+  }
+  ctxStatus('Save failed - please try again.');
+  return false;
+}
+
+async function ctxActivateToggle() {
+  if (!ctxEditingId) { ctxStatus('Save the profile first, then set it active.'); return; }
+  if (ctxEditingId === ctxState.activeId) {
+    await window.ghostmind.setActiveContextProfile(null);
+    ctxStatus('Context off - answers are generic again.');
+  } else {
+    const saved = await ctxSave();
+    if (!saved) return;
+    const res = await window.ghostmind.setActiveContextProfile(ctxEditingId);
+    if (res && res.ok) ctxStatus('Active - answers are now grounded in this profile.');
+  }
+  await loadContextPanel();
+  const p = ctxState.profiles.find(x => x.id === ctxEditingId);
+  fillCtxEditor(p || null);
+}
+
+async function ctxDelete() {
+  if (!ctxEditingId) { ctxStatus('Nothing to delete - pick a saved profile first.'); return; }
+  const p = ctxState.profiles.find(x => x.id === ctxEditingId);
+  if (!window.confirm('Delete profile "' + (p ? p.name : '') + '"? This cannot be undone.')) return;
+  await window.ghostmind.deleteContextProfile(ctxEditingId);
+  ctxEditingId = null;
+  fillCtxEditor(null);
+  ctxStatus('Profile deleted.');
+  await loadContextPanel();
+}
+
+function ctxLoadFile(input, textarea) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { textarea.value = String(reader.result || ''); updateCtxReadout(); };
+  reader.onerror = () => ctxStatus('Could not read that file - paste the text instead.');
+  reader.readAsText(file);
+  input.value = '';
+}
+
+(function initContextPanel() {
+  const byId = (id) => document.getElementById(id);
+  if (!byId('ctx-save-btn')) return;
+  byId('ctx-new-btn').addEventListener('click', () => { ctxEditingId = null; fillCtxEditor(null); ctxStatus(''); });
+  byId('ctx-save-btn').addEventListener('click', ctxSave);
+  byId('ctx-activate-btn').addEventListener('click', ctxActivateToggle);
+  byId('ctx-delete-btn').addEventListener('click', ctxDelete);
+  byId('ctx-jd').addEventListener('input', updateCtxReadout);
+  byId('ctx-resume').addEventListener('input', updateCtxReadout);
+  byId('ctx-jd-file-btn').addEventListener('click', () => byId('ctx-jd-file').click());
+  byId('ctx-resume-file-btn').addEventListener('click', () => byId('ctx-resume-file').click());
+  byId('ctx-jd-file').addEventListener('change', (e) => ctxLoadFile(e.target, byId('ctx-jd')));
+  byId('ctx-resume-file').addEventListener('change', (e) => ctxLoadFile(e.target, byId('ctx-resume')));
+  byId('context-pill').addEventListener('click', () => { switchTab('context'); loadContextPanel(); });
+  loadContextPanel();
 })();

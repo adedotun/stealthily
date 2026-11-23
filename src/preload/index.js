@@ -1,4 +1,4 @@
-// GhostMind — Preload Script
+// Hush! — Preload Script
 // Secure contextBridge between Electron main process and renderer UI
 
 'use strict';
@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld('ghostmind', {
   downloadUpdate: ()       => ipcRenderer.invoke('download-update'),
   installUpdate:  ()       => ipcRenderer.invoke('install-update'),
   exportSession:  (md)     => ipcRenderer.invoke('export-session', { markdown: md }),
+  // --- Job context profiles (v3.14) ---
+  listContextProfiles:   ()  => ipcRenderer.invoke('context-list'),
+  saveContextProfile:    (p) => ipcRenderer.invoke('context-save', p),
+  deleteContextProfile:  (id) => ipcRenderer.invoke('context-delete', id),
+  setActiveContextProfile: (id) => ipcRenderer.invoke('context-set-active', id),
 
   // ── Sessions / Memory ─────────────────────────────────────────────────────
   getSessions:    ()       => ipcRenderer.invoke('get-sessions'),
